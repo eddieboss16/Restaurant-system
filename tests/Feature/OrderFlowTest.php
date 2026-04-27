@@ -1,0 +1,211 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\CancellationLog;
+use App\Models\CustomerSession;
+use App\Models\Order;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Concerns\SeedsRestaurantData;
+use Tests\TestCase;
+
+class OrderFlowTest extends TestCase
+{
+    use RefreshDatabase;
+    use SeedsRestaurantData;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->seedRestaurantData();
+    }
+
+    public function test_waiter_opens_session_and_session_starts_open(): void
+    {
+        $waiter = User::factory()->waiter()->create();
+
+        $response = $this->actingAs($waiter, 'sanctum')
+            ->postJson('/api/sessions', ['customer_label' => 'lady in red']);
+
+        $response->assertCreated()
+            ->assertJsonFragment([
+                'waiter_id' => $waiter->id,
+                'customer_label' => 'lady in red',
+                'status' => 'open',
+            ]);
+    }
+
+    public function test_adding_first_order_flips_session_status_to_ordered(): void
+    {
+        $waiter = User::factory()->waiter()->create();
+        $session = CustomerSession::create([
+            'waiter_id' => $waiter->id,
+            'status' => 'open',
+            'opened_at' => now(),
+        ]);
+
+        $this->actingAs($waiter, 'sanctum')
+            ->postJson("/api/sessions/{$session->id}/orders", [
+                'items' => [
+                    ['menu_item_id' => $this->menuItems['soda']->id, 'quantity' => 1],
+                ],
+            ])->assertCreated();
+
+        $this->assertSame('ordered', $session->fresh()->status);
+    }
+
+    public function test_only_assigned_waiter_can_add_orders_to_their_session(): void
+    {
+        $owner = User::factory()->waiter()->create();
+        $other = User::factory()->waiter()->create();
+        $session = CustomerSession::create([
+            'waiter_id' => $owner->id,
+            'status' => 'open',
+            'opened_at' => now(),
+        ]);
+
+        $this->actingAs($other, 'sanctum')
+            ->postJson("/api/sessions/{$session->id}/orders", [
+                'items' => [
+                    ['menu_item_id' => $this->menuItems['soda']->id, 'quantity' => 1],
+                ],
+            ])->assertForbidden();
+    }
+
+    public function test_manager_can_add_orders_to_any_session(): void
+    {
+        $waiter = User::factory()->waiter()->create();
+        $manager = User::factory()->manager()->create();
+        $session = CustomerSession::create([
+            'waiter_id' => $waiter->id,
+            'status' => 'open',
+            'opened_at' => now(),
+        ]);
+
+        $this->actingAs($manager, 'sanctum')
+            ->postJson("/api/sessions/{$session->id}/orders", [
+                'items' => [
+                    ['menu_item_id' => $this->menuItems['soda']->id, 'quantity' => 1],
+                ],
+            ])->assertCreated();
+    }
+
+    public function test_kitchen_can_mark_preparing_and_ready_but_not_delivered(): void
+    {
+        $waiter = User::factory()->waiter()->create();
+        $kitchen = User::factory()->kitchen()->create();
+        $session = CustomerSession::create([
+            'waiter_id' => $waiter->id,
+            'status' => 'ordered',
+            'opened_at' => now(),
+        ]);
+        $order = Order::create([
+            'session_id' => $session->id,
+            'menu_item_id' => $this->menuItems['soda']->id,
+            'quantity' => 1,
+            'unit_price' => 80,
+            'status' => 'pending',
+        ]);
+
+        $this->actingAs($kitchen, 'sanctum')
+            ->patchJson("/api/orders/{$order->id}/status", ['status' => 'preparing'])
+            ->assertOk();
+        $this->assertSame('preparing', $order->fresh()->status);
+
+        $this->actingAs($kitchen, 'sanctum')
+            ->patchJson("/api/orders/{$order->id}/status", ['status' => 'ready'])
+            ->assertOk();
+
+        $this->actingAs($kitchen, 'sanctum')
+            ->patchJson("/api/orders/{$order->id}/status", ['status' => 'delivered'])
+            ->assertForbidden();
+    }
+
+    public function test_waiter_marks_delivered_and_session_flips_to_served_when_all_done(): void
+    {
+        $waiter = User::factory()->waiter()->create();
+        $session = CustomerSession::create([
+            'waiter_id' => $waiter->id,
+            'status' => 'ordered',
+            'opened_at' => now(),
+        ]);
+        $order = Order::create([
+            'session_id' => $session->id,
+            'menu_item_id' => $this->menuItems['soda']->id,
+            'quantity' => 1,
+            'unit_price' => 80,
+            'status' => 'ready',
+        ]);
+
+        $this->actingAs($waiter, 'sanctum')
+            ->patchJson("/api/orders/{$order->id}/status", ['status' => 'delivered'])
+            ->assertOk();
+
+        $this->assertSame('delivered', $order->fresh()->status);
+        $this->assertSame('served', $session->fresh()->status);
+    }
+
+    public function test_cancellation_logs_reason_and_blocks_after_delivery(): void
+    {
+        $waiter = User::factory()->waiter()->create();
+        $session = CustomerSession::create([
+            'waiter_id' => $waiter->id,
+            'status' => 'ordered',
+            'opened_at' => now(),
+        ]);
+        $order = Order::create([
+            'session_id' => $session->id,
+            'menu_item_id' => $this->menuItems['soda']->id,
+            'quantity' => 1,
+            'unit_price' => 80,
+            'status' => 'pending',
+        ]);
+
+        $this->actingAs($waiter, 'sanctum')
+            ->deleteJson("/api/orders/{$order->id}", ['reason' => 'wrong order'])
+            ->assertOk();
+
+        $this->assertSame('cancelled', $order->fresh()->status);
+        $this->assertDatabaseHas('cancellation_logs', [
+            'order_id' => $order->id,
+            'cancelled_by' => $waiter->id,
+            'reason' => 'wrong order',
+        ]);
+
+        $delivered = Order::create([
+            'session_id' => $session->id,
+            'menu_item_id' => $this->menuItems['soda']->id,
+            'quantity' => 1,
+            'unit_price' => 80,
+            'status' => 'delivered',
+        ]);
+
+        $this->actingAs($waiter, 'sanctum')
+            ->deleteJson("/api/orders/{$delivered->id}", ['reason' => 'too late'])
+            ->assertStatus(422);
+    }
+
+    public function test_cancellation_reason_must_be_at_least_5_chars(): void
+    {
+        $waiter = User::factory()->waiter()->create();
+        $session = CustomerSession::create([
+            'waiter_id' => $waiter->id,
+            'status' => 'ordered',
+            'opened_at' => now(),
+        ]);
+        $order = Order::create([
+            'session_id' => $session->id,
+            'menu_item_id' => $this->menuItems['soda']->id,
+            'quantity' => 1,
+            'unit_price' => 80,
+            'status' => 'pending',
+        ]);
+
+        $this->actingAs($waiter, 'sanctum')
+            ->deleteJson("/api/orders/{$order->id}", ['reason' => 'oops'])
+            ->assertStatus(422);
+
+        $this->assertDatabaseCount(CancellationLog::class, 0);
+    }
+}

@@ -10,6 +10,7 @@ use App\Services\InventoryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 
 class OrderController extends Controller
 {
@@ -35,36 +36,40 @@ class OrderController extends Controller
             'items.*.notes' => 'nullable|string',
         ]);
 
-        $orders = DB::transaction(function () use ($data, $session, $inventory) {
-            $created = [];
+        try {
+            $orders = DB::transaction(function () use ($data, $session, $inventory) {
+                $created = [];
 
-            foreach ($data['items'] as $item) {
-                $menuItem = MenuItem::findOrFail($item['menu_item_id']);
+                foreach ($data['items'] as $item) {
+                    $menuItem = MenuItem::findOrFail($item['menu_item_id']);
 
-                if (! $menuItem->is_available) {
-                    abort(422, "{$menuItem->name} is not available.");
+                    if (! $menuItem->is_available) {
+                        abort(422, "{$menuItem->name} is not available.");
+                    }
+
+                    $order = Order::create([
+                        'session_id' => $session->id,
+                        'menu_item_id' => $menuItem->id,
+                        'quantity' => $item['quantity'],
+                        'unit_price' => $menuItem->price,
+                        'notes' => $item['notes'] ?? null,
+                        'status' => 'pending',
+                    ]);
+
+                    $inventory->deductForOrder($order);
+
+                    $created[] = $order->load('menuItem');
                 }
 
-                $order = Order::create([
-                    'session_id' => $session->id,
-                    'menu_item_id' => $menuItem->id,
-                    'quantity' => $item['quantity'],
-                    'unit_price' => $menuItem->price,
-                    'notes' => $item['notes'] ?? null,
-                    'status' => 'pending',
-                ]);
+                if ($session->status === 'open') {
+                    $session->update(['status' => 'ordered']);
+                }
 
-                $inventory->deductForOrder($order);
-
-                $created[] = $order->load('menuItem');
-            }
-
-            if ($session->status === 'open') {
-                $session->update(['status' => 'ordered']);
-            }
-
-            return $created;
-        });
+                return $created;
+            });
+        } catch (RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
 
         return response()->json($orders, 201);
     }

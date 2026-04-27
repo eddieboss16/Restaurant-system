@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Order;
+use App\Models\Resource;
 use App\Models\ResourceTransaction;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -11,14 +12,17 @@ class InventoryService
 {
     public function deductForOrder(Order $order): void
     {
-        $recipes = $order->menuItem->recipeIngredients()->with('resource')->get();
+        // Sort recipes by resource_id so concurrent transactions always
+        // acquire locks in the same global order -- prevents deadlocks
+        // when two orders touch overlapping resources in different sequences.
+        $recipes = $order->menuItem->recipeIngredients()
+            ->orderBy('resource_id')
+            ->get();
 
         DB::transaction(function () use ($recipes, $order) {
             foreach ($recipes as $recipe) {
-                $resource = $recipe->resource;
+                $resource = Resource::lockForUpdate()->find($recipe->resource_id);
                 $totalDeduction = (float) $recipe->quantity_used * $order->quantity;
-
-                $resource->refresh();
 
                 if ((float) $resource->current_stock < $totalDeduction) {
                     throw new RuntimeException(sprintf(

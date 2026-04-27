@@ -14,7 +14,13 @@ class Payment extends Model
         'session_id',
         'method',
         'amount',
+        'phone_number',
+        'status',
         'mpesa_code',
+        'mpesa_checkout_request_id',
+        'mpesa_merchant_request_id',
+        'mpesa_result_code',
+        'mpesa_result_desc',
         'collected_by',
         'confirmed_at',
     ];
@@ -24,6 +30,7 @@ class Payment extends Model
         return [
             'amount' => 'decimal:2',
             'confirmed_at' => 'datetime',
+            'mpesa_result_code' => 'integer',
         ];
     }
 

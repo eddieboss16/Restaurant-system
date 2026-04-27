@@ -214,18 +214,44 @@
 
                 <template x-if="paymentMethod === 'mpesa'">
                     <div>
-                        <label class="block text-xs text-slate-600 mb-1">Mpesa transaction code</label>
-                        <input type="text" x-model="paymentMpesaCode" placeholder="e.g. QJK12ABCD3"
-                               class="w-full rounded border border-slate-300 px-3 py-2 text-sm mb-3">
+                        <div class="flex gap-1 mb-3 text-xs">
+                            <button @click="mpesaMode = 'stk'"
+                                    :class="mpesaMode === 'stk' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600'"
+                                    class="flex-1 rounded py-1.5">Send STK push</button>
+                            <button @click="mpesaMode = 'code'"
+                                    :class="mpesaMode === 'code' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600'"
+                                    class="flex-1 rounded py-1.5">Type code</button>
+                        </div>
+
+                        <template x-if="mpesaMode === 'stk'">
+                            <div>
+                                <label class="block text-xs text-slate-600 mb-1">Customer phone</label>
+                                <input type="tel" x-model="paymentPhone" placeholder="07XX XXX XXX"
+                                       class="w-full rounded border border-slate-300 px-3 py-2 text-sm mb-3">
+                                <p class="text-xs text-slate-500 mb-3">Customer's phone will vibrate with a payment prompt.</p>
+                            </div>
+                        </template>
+
+                        <template x-if="mpesaMode === 'code'">
+                            <div>
+                                <label class="block text-xs text-slate-600 mb-1">Mpesa transaction code</label>
+                                <input type="text" x-model="paymentMpesaCode" placeholder="e.g. QJK12ABCD3"
+                                       class="w-full rounded border border-slate-300 px-3 py-2 text-sm mb-3">
+                            </div>
+                        </template>
                     </div>
                 </template>
 
+                <div x-show="stkWaiting" x-cloak class="bg-amber-50 border border-amber-200 text-amber-800 rounded text-sm px-3 py-2 mb-3">
+                    Waiting for customer… (STK push sent, prompt expires in ~60s)
+                </div>
+
                 <div class="flex justify-end gap-2">
-                    <button @click="cancelPayment()" class="text-sm text-slate-600 px-3 py-2">Cancel</button>
-                    <button @click="submitPayment()"
-                            class="text-sm bg-emerald-600 text-white rounded px-4 py-2 hover:bg-emerald-700">
-                        Confirm
-                    </button>
+                    <button @click="cancelPayment()" :disabled="stkWaiting"
+                            class="text-sm text-slate-600 px-3 py-2 disabled:opacity-40">Cancel</button>
+                    <button @click="submitPayment()" :disabled="stkWaiting"
+                            class="text-sm bg-emerald-600 text-white rounded px-4 py-2 hover:bg-emerald-700 disabled:opacity-40"
+                            x-text="(paymentMethod === 'mpesa' && mpesaMode === 'stk') ? 'Send STK' : 'Confirm'"></button>
                 </div>
             </div>
         </div>
@@ -269,6 +295,10 @@
                 paymentMethod: 'cash',
                 paymentAmount: 0,
                 paymentMpesaCode: '',
+                paymentPhone: '',
+                mpesaMode: 'stk',
+                stkWaiting: false,
+                stkPollHandle: null,
 
                 async init() {
                     await Promise.all([this.loadSessions(), this.loadMenu()]);
@@ -435,19 +465,34 @@
                     this.paymentMethod = 'cash';
                     this.paymentAmount = this.sessionTotal(session);
                     this.paymentMpesaCode = '';
+                    this.paymentPhone = '';
+                    this.mpesaMode = 'stk';
+                    this.stkWaiting = false;
                 },
 
                 cancelPayment() {
+                    if (this.stkPollHandle) {
+                        clearInterval(this.stkPollHandle);
+                        this.stkPollHandle = null;
+                    }
                     this.paymentSession = null;
                     this.paymentMpesaCode = '';
+                    this.paymentPhone = '';
+                    this.stkWaiting = false;
                 },
 
                 async submitPayment() {
                     if (!this.paymentSession) return;
+
+                    if (this.paymentMethod === 'mpesa' && this.mpesaMode === 'stk') {
+                        return this.sendStkPush();
+                    }
+
                     if (this.paymentMethod === 'mpesa' && !this.paymentMpesaCode.trim()) {
                         alert('Mpesa code is required.');
                         return;
                     }
+
                     try {
                         await api(`/sessions/${this.paymentSession.id}/payment`, {
                             method: 'POST',
@@ -462,6 +507,53 @@
                     } catch (e) {
                         alert(e.message);
                     }
+                },
+
+                async sendStkPush() {
+                    if (!this.paymentPhone.trim()) {
+                        alert('Customer phone is required.');
+                        return;
+                    }
+                    const sessionId = this.paymentSession.id;
+                    try {
+                        await api(`/sessions/${sessionId}/payment/stk`, {
+                            method: 'POST',
+                            body: JSON.stringify({ phone: this.paymentPhone, amount: this.paymentAmount }),
+                        });
+                        this.stkWaiting = true;
+                        this.startStkPolling(sessionId);
+                    } catch (e) {
+                        alert(e.message);
+                    }
+                },
+
+                startStkPolling(sessionId) {
+                    let elapsed = 0;
+                    this.stkPollHandle = setInterval(async () => {
+                        elapsed += 3;
+                        try {
+                            const fresh = await api('/sessions/' + sessionId);
+                            if (fresh.status === 'paid') {
+                                clearInterval(this.stkPollHandle);
+                                this.stkPollHandle = null;
+                                this.cancelPayment();
+                                await this.loadSessions();
+                            } else if (fresh.payment && fresh.payment.status === 'failed') {
+                                clearInterval(this.stkPollHandle);
+                                this.stkPollHandle = null;
+                                this.stkWaiting = false;
+                                alert('STK failed: ' + (fresh.payment.mpesa_result_desc || 'unknown error'));
+                            }
+                        } catch (e) {
+                            // session may have disappeared from this waiter's list once paid
+                        }
+                        if (elapsed >= 90) {
+                            clearInterval(this.stkPollHandle);
+                            this.stkPollHandle = null;
+                            this.stkWaiting = false;
+                            alert('STK push timed out. Try again, or use the Type-code fallback.');
+                        }
+                    }, 3000);
                 },
             };
         }

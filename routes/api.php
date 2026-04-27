@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\MpesaController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\SessionController;
@@ -10,6 +11,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/login', [AuthController::class, 'login']);
+
+// Daraja STK push callback. Public, no auth -- Safaricom calls this directly.
+Route::post('/mpesa/callback', [MpesaController::class, 'callback']);
 
 Route::middleware('auth:sanctum')->group(function () {
 
@@ -31,6 +35,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::post('/sessions/{session}/orders', [OrderController::class, 'store']);
         Route::post('/sessions/{session}/payment', [PaymentController::class, 'store']);
+        Route::post('/sessions/{session}/payment/stk', [PaymentController::class, 'initiateStk']);
 
         Route::delete('/orders/{order}', [OrderController::class, 'cancel']);
     });

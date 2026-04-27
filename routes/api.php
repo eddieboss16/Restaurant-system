@@ -39,6 +39,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/orders/{order}/status', [OrderController::class, 'updateStatus']);
     });
 
+    Route::middleware('role:kitchen,manager')->group(function () {
+        Route::get('/kitchen/queue', [OrderController::class, 'kitchenQueue']);
+    });
+
     Route::middleware('role:admin')->prefix('admin')->group(function () {
         Route::get('/staff', [AdminController::class, 'listStaff']);
         Route::post('/staff', [AdminController::class, 'createStaff']);

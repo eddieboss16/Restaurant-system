@@ -13,6 +13,17 @@ use Illuminate\Support\Facades\DB;
 
 class OrderController extends Controller
 {
+    public function kitchenQueue(): JsonResponse
+    {
+        $orders = Order::with(['menuItem:id,name,category', 'session:id,customer_label,waiter_id', 'session.waiter:id,name'])
+            ->whereIn('status', ['pending', 'preparing', 'ready'])
+            ->orderByRaw("CASE status WHEN 'pending' THEN 1 WHEN 'preparing' THEN 2 WHEN 'ready' THEN 3 END")
+            ->orderBy('created_at')
+            ->get();
+
+        return response()->json($orders);
+    }
+
     public function store(Request $request, CustomerSession $session, InventoryService $inventory): JsonResponse
     {
         $this->authorize('addOrder', $session);

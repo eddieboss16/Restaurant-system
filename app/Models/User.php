@@ -62,4 +62,13 @@ class User extends Authenticatable
     {
         return $this->role === 'admin';
     }
+
+    public function isPrimaryAdmin(): bool
+    {
+        if (! $this->isAdmin()) {
+            return false;
+        }
+
+        return static::where('role', 'admin')->min('id') === $this->id;
+    }
 }

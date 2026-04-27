@@ -43,6 +43,7 @@ class LoginController extends Controller
         return redirect()->intended(
             match ($user->role) {
                 'admin' => '/admin/dashboard',
+                'kitchen' => '/kitchen/dashboard',
                 default => '/waiter/dashboard',
             }
         );

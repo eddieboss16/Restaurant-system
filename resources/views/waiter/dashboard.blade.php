@@ -15,10 +15,18 @@
                 <h1 class="text-lg font-semibold text-slate-800">Waiter Dashboard</h1>
                 <p class="text-xs text-slate-500">{{ auth()->user()->name }} · {{ ucfirst(auth()->user()->role) }}</p>
             </div>
-            <form method="POST" action="/logout">
-                @csrf
-                <button class="text-sm text-slate-600 hover:text-slate-900 underline">Log out</button>
-            </form>
+            <div class="flex items-center gap-3">
+                @if (auth()->user()->isAdmin())
+                    <a href="/admin/dashboard" class="text-sm text-slate-600 hover:text-slate-900 underline">Admin</a>
+                @endif
+                @if (auth()->user()->isAdmin() || auth()->user()->isManager())
+                    <a href="/kitchen/dashboard" class="text-sm text-slate-600 hover:text-slate-900 underline">Kitchen</a>
+                @endif
+                <form method="POST" action="/logout">
+                    @csrf
+                    <button class="text-sm text-slate-600 hover:text-slate-900 underline">Log out</button>
+                </form>
+            </div>
         </div>
     </header>
 

@@ -19,7 +19,7 @@ class CustomerSessionPolicy
 
     public function addOrder(User $user, CustomerSession $session): bool
     {
-        if ($user->isAdmin()) {
+        if ($user->isAdmin() || $user->isManager()) {
             return $session->status !== 'paid';
         }
 
@@ -28,7 +28,7 @@ class CustomerSessionPolicy
 
     public function collectPayment(User $user, CustomerSession $session): bool
     {
-        if ($user->isAdmin()) {
+        if ($user->isAdmin() || $user->isManager()) {
             return $session->status !== 'paid';
         }
 

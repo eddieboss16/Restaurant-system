@@ -17,6 +17,7 @@
             </div>
             <div class="flex items-center gap-3">
                 <a href="/waiter/dashboard" class="text-xs underline text-slate-200">Waiter view</a>
+                <a href="/kitchen/dashboard" class="text-xs underline text-slate-200">Kitchen view</a>
                 <form method="POST" action="/logout">
                     @csrf
                     <button class="text-xs underline text-slate-200">Log out</button>
@@ -61,11 +62,17 @@
                     <tbody>
                         <template x-for="u in staff" :key="u.id">
                             <tr class="border-t border-slate-100">
-                                <td class="px-3 py-2" x-text="u.name"></td>
+                                <td class="px-3 py-2">
+                                    <span x-text="u.name"></span>
+                                    <span x-show="u.is_primary_admin"
+                                          class="ml-2 text-[10px] uppercase tracking-wide bg-amber-100 text-amber-800 rounded px-1.5 py-0.5">Owner</span>
+                                </td>
                                 <td class="px-3 py-2 text-slate-600" x-text="u.email"></td>
                                 <td class="px-3 py-2">
                                     <select :value="u.role" @change="updateStaff(u, { role: $event.target.value })"
-                                            class="text-xs rounded border border-slate-300 px-1 py-0.5">
+                                            :disabled="lockedFor(u)"
+                                            :title="lockedFor(u) ? 'The owner cannot be demoted by another admin.' : ''"
+                                            class="text-xs rounded border border-slate-300 px-1 py-0.5 disabled:opacity-40 disabled:cursor-not-allowed">
                                         <option value="waiter">waiter</option>
                                         <option value="kitchen">kitchen</option>
                                         <option value="manager">manager</option>
@@ -75,8 +82,10 @@
                                 <td class="px-3 py-2 text-slate-500" x-text="u.pin || '—'"></td>
                                 <td class="px-3 py-2">
                                     <button @click="updateStaff(u, { is_active: !u.is_active })"
+                                            :disabled="lockedFor(u)"
+                                            :title="lockedFor(u) ? 'The owner cannot be deactivated by another admin.' : ''"
                                             :class="u.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'"
-                                            class="text-xs rounded px-2 py-0.5"
+                                            class="text-xs rounded px-2 py-0.5 disabled:opacity-40 disabled:cursor-not-allowed"
                                             x-text="u.is_active ? 'active' : 'disabled'"></button>
                                 </td>
                                 <td class="px-3 py-2 text-right">
@@ -254,6 +263,7 @@
 
     <script>
         const API_TOKEN = @json(session('api_token'));
+        const CURRENT_USER_ID = @json(auth()->user()->id);
 
         function api(path, options = {}) {
             return fetch('/api' + path, {
@@ -302,6 +312,10 @@
 
                 async init() {
                     await this.loadAll();
+                },
+
+                lockedFor(u) {
+                    return u.is_primary_admin && u.id !== CURRENT_USER_ID;
                 },
 
                 async loadAll() {

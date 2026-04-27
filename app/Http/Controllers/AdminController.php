@@ -19,10 +19,13 @@ class AdminController extends Controller
 
     public function listStaff(): JsonResponse
     {
-        return response()->json(
-            User::orderBy('role')->orderBy('name')
-                ->get(['id', 'name', 'email', 'role', 'is_active', 'pin'])
-        );
+        $primaryAdminId = User::where('role', 'admin')->min('id');
+
+        $staff = User::orderBy('role')->orderBy('name')
+            ->get(['id', 'name', 'email', 'role', 'is_active', 'pin'])
+            ->map(fn ($u) => $u->toArray() + ['is_primary_admin' => $u->id === $primaryAdminId]);
+
+        return response()->json($staff);
     }
 
     public function createStaff(Request $request): JsonResponse
@@ -63,6 +66,15 @@ class AdminController extends Controller
 
         if ($user->id === $request->user()->id && isset($data['role']) && $data['role'] !== 'admin') {
             abort(422, 'You cannot demote your own admin account.');
+        }
+
+        if ($user->isPrimaryAdmin() && $user->id !== $request->user()->id) {
+            if (isset($data['role']) && $data['role'] !== 'admin') {
+                abort(422, 'The primary admin cannot be demoted by another admin.');
+            }
+            if (array_key_exists('is_active', $data) && $data['is_active'] === false) {
+                abort(422, 'The primary admin cannot be deactivated by another admin.');
+            }
         }
 
         if (! empty($data['password'])) {

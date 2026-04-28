@@ -34,6 +34,23 @@
           x-data="waiterDashboard()"
           x-init="init()">
 
+        <!-- Today strip -->
+        <div class="bg-white border border-slate-200 rounded-lg px-4 py-2 mb-4 flex items-center justify-between text-sm">
+            <div class="text-slate-500">
+                <span class="uppercase tracking-wide text-xs">Today</span>
+            </div>
+            <div class="flex gap-6 text-slate-700">
+                <div>
+                    <span class="font-semibold" x-text="myToday ? myToday.sessions_paid : '—'"></span>
+                    <span class="text-xs text-slate-500 ml-1">sessions paid</span>
+                </div>
+                <div>
+                    KES <span class="font-semibold" x-text="myToday ? formatMoney(myToday.revenue_collected) : '—'"></span>
+                    <span class="text-xs text-slate-500 ml-1">collected</span>
+                </div>
+            </div>
+        </div>
+
         <div class="flex items-center justify-between mb-4">
             <div class="text-sm text-slate-600">
                 <span x-text="sessions.length"></span> active session(s)
@@ -300,9 +317,12 @@
                 stkWaiting: false,
                 stkPollHandle: null,
 
+                myToday: null,
+
                 async init() {
-                    await Promise.all([this.loadSessions(), this.loadMenu()]);
+                    await Promise.all([this.loadSessions(), this.loadMenu(), this.loadMyToday()]);
                     setInterval(() => this.loadSessions(), 15000);
+                    setInterval(() => this.loadMyToday(), 60000);
                 },
 
                 async loadSessions() {
@@ -321,6 +341,14 @@
                         this.menu = await api('/menu-items');
                     } catch (e) {
                         console.error(e);
+                    }
+                },
+
+                async loadMyToday() {
+                    try {
+                        this.myToday = await api('/me/today');
+                    } catch (e) {
+                        // not fatal -- the strip will just show dashes.
                     }
                 },
 

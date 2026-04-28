@@ -7,6 +7,7 @@ use App\Models\MenuItem;
 use App\Models\Resource;
 use App\Models\ResourceTransaction;
 use App\Models\User;
+use App\Services\ReportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -192,5 +193,12 @@ class AdminController extends Controller
                 ->limit(100)
                 ->get()
         );
+    }
+
+    // ----- Reports -----
+
+    public function dailyReport(ReportService $reports): JsonResponse
+    {
+        return response()->json($reports->dailySnapshot());
     }
 }

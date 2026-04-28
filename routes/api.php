@@ -7,6 +7,7 @@ use App\Http\Controllers\OrderController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\SessionController;
 use App\Models\MenuItem;
+use App\Services\ReportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -20,6 +21,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
 
     Route::get('/user', fn (Request $request) => $request->user()->only('id', 'name', 'role'));
+
+    Route::get('/me/today', fn (Request $request, ReportService $reports) => $reports->waiterToday($request->user()));
 
     Route::get('/menu-items', function () {
         return MenuItem::where('is_available', true)
@@ -63,5 +66,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/resources/{resource}/restock', [AdminController::class, 'restockResource']);
 
         Route::get('/cancellations', [AdminController::class, 'listCancellations']);
+
+        Route::get('/reports/today', [AdminController::class, 'dailyReport']);
     });
 });

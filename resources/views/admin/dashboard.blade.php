@@ -41,6 +41,80 @@
 
         <div x-show="error" x-cloak class="mb-3 bg-red-100 text-red-700 text-sm rounded px-3 py-2" x-text="error"></div>
 
+        <!-- Reports -->
+        <section x-show="tab === 'reports'" x-cloak>
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="font-semibold text-slate-800">Today's snapshot</h2>
+                <span class="text-xs text-slate-500" x-text="report ? report.date : ''"></span>
+            </div>
+
+            <template x-if="report">
+                <div class="space-y-3">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div class="bg-white rounded-lg border border-slate-200 p-4 md:col-span-1">
+                            <div class="text-xs uppercase tracking-wide text-slate-500">Revenue today</div>
+                            <div class="text-2xl font-semibold text-slate-800 mt-1">
+                                KES <span x-text="formatKes(report.revenue.today)"></span>
+                            </div>
+                            <div class="text-xs mt-1"
+                                 :class="deltaClass(report.revenue.today, report.revenue.yesterday)"
+                                 x-text="deltaLabel(report.revenue.today, report.revenue.yesterday) + ' vs yesterday (KES ' + formatKes(report.revenue.yesterday) + ')'"></div>
+                        </div>
+
+                        <div class="bg-white rounded-lg border border-slate-200 p-4">
+                            <div class="text-xs uppercase tracking-wide text-slate-500">Sessions paid</div>
+                            <div class="text-2xl font-semibold text-slate-800 mt-1" x-text="report.sessions_paid.today"></div>
+                            <div class="text-xs text-slate-500 mt-1"
+                                 x-text="'yesterday: ' + report.sessions_paid.yesterday"></div>
+                        </div>
+
+                        <div class="bg-white rounded-lg border border-slate-200 p-4">
+                            <div class="text-xs uppercase tracking-wide text-slate-500">Cancellations</div>
+                            <div class="text-2xl font-semibold text-slate-800 mt-1" x-text="report.cancellations"></div>
+                            <div class="text-xs text-slate-500 mt-1">today</div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div class="bg-white rounded-lg border border-slate-200 p-4">
+                            <div class="text-xs uppercase tracking-wide text-slate-500 mb-3">By payment method</div>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex justify-between">
+                                    <span class="text-slate-600">Cash</span>
+                                    <span class="font-medium" x-text="'KES ' + formatKes(report.by_method.cash)"></span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-slate-600">M-Pesa</span>
+                                    <span class="font-medium" x-text="'KES ' + formatKes(report.by_method.mpesa)"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-lg border border-slate-200 p-4">
+                            <div class="text-xs uppercase tracking-wide text-slate-500 mb-3">Top items</div>
+                            <template x-if="report.top_items.length === 0">
+                                <div class="text-xs text-slate-400 italic">No items sold yet today.</div>
+                            </template>
+                            <div class="space-y-1.5 text-sm">
+                                <template x-for="item in report.top_items" :key="item.name">
+                                    <div class="flex justify-between">
+                                        <span class="text-slate-700">
+                                            <span x-text="item.quantity"></span>×
+                                            <span x-text="item.name"></span>
+                                        </span>
+                                        <span class="text-slate-500" x-text="'KES ' + formatKes(item.revenue)"></span>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+            <template x-if="!report">
+                <div class="text-sm text-slate-500 py-10 text-center">Loading…</div>
+            </template>
+        </section>
+
         <!-- Staff -->
         <section x-show="tab === 'staff'" x-cloak>
             <div class="flex justify-between items-center mb-3">
@@ -285,18 +359,20 @@
         function adminDashboard() {
             return {
                 tabs: [
+                    { key: 'reports',       label: 'Reports' },
                     { key: 'staff',         label: 'Staff' },
                     { key: 'menu',          label: 'Menu' },
                     { key: 'resources',     label: 'Inventory' },
                     { key: 'cancellations', label: 'Cancellations' },
                 ],
-                tab: 'staff',
+                tab: 'reports',
                 error: '',
 
                 staff: [],
                 menuItems: [],
                 resources: [],
                 cancellations: [],
+                report: null,
 
                 restockAmounts: {},
                 restockReasons: {},
@@ -320,19 +396,39 @@
 
                 async loadAll() {
                     try {
-                        const [staff, menu, res, canc] = await Promise.all([
+                        const [staff, menu, res, canc, report] = await Promise.all([
                             api('/admin/staff'),
                             api('/admin/menu-items'),
                             api('/admin/resources'),
                             api('/admin/cancellations'),
+                            api('/admin/reports/today'),
                         ]);
                         this.staff = staff;
                         this.menuItems = menu;
                         this.resources = res;
                         this.cancellations = canc;
+                        this.report = report;
                     } catch (e) {
                         this.error = e.message;
                     }
+                },
+
+                formatKes(n) {
+                    return Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                },
+
+                deltaLabel(today, yesterday) {
+                    if (!yesterday || yesterday === 0) {
+                        return today > 0 ? '+new today' : 'no activity';
+                    }
+                    const pct = ((today - yesterday) / yesterday) * 100;
+                    const sign = pct >= 0 ? '+' : '';
+                    return sign + pct.toFixed(1) + '%';
+                },
+
+                deltaClass(today, yesterday) {
+                    if (today === yesterday) return 'text-slate-500';
+                    return today > yesterday ? 'text-emerald-600' : 'text-red-600';
                 },
 
                 async createStaff() {

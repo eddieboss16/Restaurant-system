@@ -27,7 +27,7 @@ class AuthTest extends TestCase
             ->get('/')->assertRedirect('/waiter/dashboard');
 
         $this->actingAs(User::factory()->manager()->create())
-            ->get('/')->assertRedirect('/waiter/dashboard');
+            ->get('/')->assertRedirect('/manager/dashboard');
     }
 
     public function test_api_login_issues_a_token_and_returns_user_summary(): void
@@ -91,12 +91,24 @@ class AuthTest extends TestCase
         $this->actingAs($admin)->get('/kitchen/dashboard')->assertOk();
     }
 
-    public function test_manager_can_reach_waiter_and_kitchen_views_but_not_admin(): void
+    public function test_manager_can_reach_waiter_kitchen_and_manager_views_but_not_admin(): void
     {
         $manager = User::factory()->manager()->create();
 
         $this->actingAs($manager)->get('/waiter/dashboard')->assertOk();
         $this->actingAs($manager)->get('/kitchen/dashboard')->assertOk();
+        $this->actingAs($manager)->get('/manager/dashboard')->assertOk();
         $this->actingAs($manager)->get('/admin/dashboard')->assertForbidden();
+    }
+
+    public function test_only_manager_and_admin_reach_manager_dashboard(): void
+    {
+        $waiter = User::factory()->waiter()->create();
+        $kitchen = User::factory()->kitchen()->create();
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($waiter)->get('/manager/dashboard')->assertForbidden();
+        $this->actingAs($kitchen)->get('/manager/dashboard')->assertForbidden();
+        $this->actingAs($admin)->get('/manager/dashboard')->assertOk(); // wildcard bypass
     }
 }

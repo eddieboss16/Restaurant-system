@@ -78,7 +78,7 @@ class ReportTest extends TestCase
     public function test_daily_report_returns_expected_structure_and_zero_state(): void
     {
         $payload = $this->actingAs($this->admin, 'sanctum')
-            ->getJson('/api/admin/reports/today')
+            ->getJson('/api/reports/today')
             ->assertOk()
             ->json();
 
@@ -104,7 +104,7 @@ class ReportTest extends TestCase
         $this->paidSession($waiter, $this->yesterday->copy()->setTime(13, 0), [['chips', 1]], 'cash');
 
         $payload = $this->actingAs($this->admin, 'sanctum')
-            ->getJson('/api/admin/reports/today')
+            ->getJson('/api/reports/today')
             ->assertOk()
             ->json();
 
@@ -130,7 +130,7 @@ class ReportTest extends TestCase
         $this->paidSession($waiter, $this->yesterday->copy()->setTime(13, 0), [['chips', 100]]);
 
         $payload = $this->actingAs($this->admin, 'sanctum')
-            ->getJson('/api/admin/reports/today')
+            ->getJson('/api/reports/today')
             ->assertOk()
             ->json();
 
@@ -166,7 +166,7 @@ class ReportTest extends TestCase
         ]);
 
         $payload = $this->actingAs($this->admin, 'sanctum')
-            ->getJson('/api/admin/reports/today')
+            ->getJson('/api/reports/today')
             ->assertOk()
             ->json();
 
@@ -204,7 +204,7 @@ class ReportTest extends TestCase
         ]);
 
         $payload = $this->actingAs($this->admin, 'sanctum')
-            ->getJson('/api/admin/reports/today')
+            ->getJson('/api/reports/today')
             ->assertOk()
             ->json();
 
@@ -216,7 +216,7 @@ class ReportTest extends TestCase
         $waiter = User::factory()->waiter()->create();
 
         $this->actingAs($waiter, 'sanctum')
-            ->getJson('/api/admin/reports/today')
+            ->getJson('/api/reports/today')
             ->assertForbidden();
     }
 
@@ -234,7 +234,7 @@ class ReportTest extends TestCase
         $this->paidSession($waiter, $lastMonthEnd, [['chips', 5]]);    // 750 in previous month
 
         $payload = $this->actingAs($this->admin, 'sanctum')
-            ->getJson('/api/admin/reports/month')
+            ->getJson('/api/reports/month')
             ->assertOk()
             ->json();
 
@@ -251,7 +251,7 @@ class ReportTest extends TestCase
         $waiter = User::factory()->waiter()->create();
 
         $this->actingAs($waiter, 'sanctum')
-            ->getJson('/api/admin/reports/month')
+            ->getJson('/api/reports/month')
             ->assertForbidden();
     }
 

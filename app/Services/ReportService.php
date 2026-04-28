@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\CancellationLog;
 use App\Models\CustomerSession;
+use App\Models\Expense;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\User;
@@ -21,12 +22,17 @@ class ReportService
         $current = $date ?? CarbonImmutable::today();
         $previous = $current->subDay();
 
+        $revenueCurrent = $this->revenueOn($current);
+        $revenuePrevious = $this->revenueOn($previous);
+        $expensesCurrent = $this->expensesBetween($current->toDateString(), $current->toDateString());
+        $expensesPrevious = $this->expensesBetween($previous->toDateString(), $previous->toDateString());
+
         return [
             'period' => 'day',
             'label' => $current->toDateString(),
             'revenue' => [
-                'current' => $this->revenueOn($current),
-                'previous' => $this->revenueOn($previous),
+                'current' => $revenueCurrent,
+                'previous' => $revenuePrevious,
             ],
             'sessions_paid' => [
                 'current' => $this->sessionsPaidOn($current),
@@ -35,6 +41,15 @@ class ReportService
             'by_method' => $this->revenueByMethodOn($current),
             'top_items' => $this->topItemsOn($current, limit: 5),
             'cancellations' => $this->cancellationsOn($current),
+            'expenses' => [
+                'current' => $expensesCurrent,
+                'previous' => $expensesPrevious,
+            ],
+            'expenses_by_category' => $this->expensesByCategoryBetween($current->toDateString(), $current->toDateString()),
+            'net' => [
+                'current' => $revenueCurrent - $expensesCurrent,
+                'previous' => $revenuePrevious - $expensesPrevious,
+            ],
         ];
     }
 
@@ -47,13 +62,20 @@ class ReportService
     {
         $current = ($date ?? CarbonImmutable::today())->startOfMonth();
         $previous = $current->subMonth();
+        $currentEnd = $current->endOfMonth();
+        $previousEnd = $previous->endOfMonth();
+
+        $revenueCurrent = $this->revenueIn($this->monthBounds($current));
+        $revenuePrevious = $this->revenueIn($this->monthBounds($previous));
+        $expensesCurrent = $this->expensesBetween($current->toDateString(), $currentEnd->toDateString());
+        $expensesPrevious = $this->expensesBetween($previous->toDateString(), $previousEnd->toDateString());
 
         return [
             'period' => 'month',
             'label' => $current->format('Y-m'),
             'revenue' => [
-                'current' => $this->revenueIn($this->monthBounds($current)),
-                'previous' => $this->revenueIn($this->monthBounds($previous)),
+                'current' => $revenueCurrent,
+                'previous' => $revenuePrevious,
             ],
             'sessions_paid' => [
                 'current' => $this->sessionsPaidIn($this->monthBounds($current)),
@@ -62,6 +84,15 @@ class ReportService
             'by_method' => $this->revenueByMethodIn($this->monthBounds($current)),
             'top_items' => $this->topItemsIn($this->monthBounds($current), limit: 10),
             'cancellations' => $this->cancellationsIn($this->monthBounds($current)),
+            'expenses' => [
+                'current' => $expensesCurrent,
+                'previous' => $expensesPrevious,
+            ],
+            'expenses_by_category' => $this->expensesByCategoryBetween($current->toDateString(), $currentEnd->toDateString()),
+            'net' => [
+                'current' => $revenueCurrent - $expensesCurrent,
+                'previous' => $revenuePrevious - $expensesPrevious,
+            ],
         ];
     }
 
@@ -224,5 +255,27 @@ class ReportService
     private function monthBounds(CarbonImmutable $monthStart): array
     {
         return [Carbon::instance($monthStart->startOfMonth()), Carbon::instance($monthStart->endOfMonth())];
+    }
+
+    private function expensesBetween(string $fromDate, string $toDate): float
+    {
+        return (float) Expense::query()
+            ->whereBetween('incurred_on', [$fromDate, $toDate])
+            ->sum('amount');
+    }
+
+    private function expensesByCategoryBetween(string $fromDate, string $toDate): array
+    {
+        $rows = Expense::query()
+            ->selectRaw('category, SUM(amount) as total')
+            ->whereBetween('incurred_on', [$fromDate, $toDate])
+            ->groupBy('category')
+            ->get();
+
+        $byCategory = array_fill_keys(Expense::CATEGORIES, 0.0);
+        foreach ($rows as $row) {
+            $byCategory[$row->category] = (float) $row->total;
+        }
+        return $byCategory;
     }
 }

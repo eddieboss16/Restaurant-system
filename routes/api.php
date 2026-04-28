@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\MpesaController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\PaymentController;
@@ -52,6 +53,18 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/kitchen/history', [OrderController::class, 'kitchenHistory']);
     });
 
+    // Expenses + reports: manager records/views; admin reaches both via the
+    // role-wildcard bypass in EnsureRole.
+    Route::middleware('role:manager')->group(function () {
+        Route::get('/expenses', [ExpenseController::class, 'index']);
+        Route::post('/expenses', [ExpenseController::class, 'store']);
+        Route::patch('/expenses/{expense}', [ExpenseController::class, 'update']);
+        Route::delete('/expenses/{expense}', [ExpenseController::class, 'destroy']);
+
+        Route::get('/reports/today', [AdminController::class, 'dailyReport']);
+        Route::get('/reports/month', [AdminController::class, 'monthlyReport']);
+    });
+
     Route::middleware('role:admin')->prefix('admin')->group(function () {
         Route::get('/staff', [AdminController::class, 'listStaff']);
         Route::post('/staff', [AdminController::class, 'createStaff']);
@@ -67,8 +80,5 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/resources/{resource}/restock', [AdminController::class, 'restockResource']);
 
         Route::get('/cancellations', [AdminController::class, 'listCancellations']);
-
-        Route::get('/reports/today', [AdminController::class, 'dailyReport']);
-        Route::get('/reports/month', [AdminController::class, 'monthlyReport']);
     });
 });

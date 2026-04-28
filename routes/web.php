@@ -11,6 +11,7 @@ Route::get('/', function () {
 
     return redirect(match (Auth::user()->role) {
         'admin' => '/admin/dashboard',
+        'manager' => '/manager/dashboard',
         'kitchen' => '/kitchen/dashboard',
         default => '/waiter/dashboard',
     });
@@ -28,6 +29,10 @@ Route::middleware('auth')->group(function () {
     Route::view('/kitchen/dashboard', 'kitchen.dashboard')
         ->middleware('role:kitchen,manager,admin')
         ->name('kitchen.dashboard');
+
+    Route::view('/manager/dashboard', 'manager.dashboard')
+        ->middleware('role:manager')
+        ->name('manager.dashboard');
 
     Route::view('/admin/dashboard', 'admin.dashboard')
         ->middleware('role:admin')

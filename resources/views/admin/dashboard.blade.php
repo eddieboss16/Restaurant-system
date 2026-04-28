@@ -413,7 +413,7 @@
                             api('/admin/menu-items'),
                             api('/admin/resources'),
                             api('/admin/cancellations'),
-                            api('/admin/reports/' + (this.reportPeriod === 'day' ? 'today' : 'month')),
+                            api('/reports/' + (this.reportPeriod === 'day' ? 'today' : 'month')),
                         ]);
                         this.staff = staff;
                         this.menuItems = menu;
@@ -430,7 +430,7 @@
                     this.reportPeriod = period;
                     this.report = null;
                     try {
-                        this.report = await api('/admin/reports/' + (period === 'day' ? 'today' : 'month'));
+                        this.report = await api('/reports/' + (period === 'day' ? 'today' : 'month'));
                     } catch (e) {
                         this.error = e.message;
                     }

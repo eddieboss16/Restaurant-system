@@ -82,10 +82,11 @@ class ReportTest extends TestCase
             ->assertOk()
             ->json();
 
-        $this->assertSame($this->today->toDateString(), $payload['date']);
-        $this->assertEquals(0, $payload['revenue']['today']);
-        $this->assertEquals(0, $payload['revenue']['yesterday']);
-        $this->assertSame(0, $payload['sessions_paid']['today']);
+        $this->assertSame('day', $payload['period']);
+        $this->assertSame($this->today->toDateString(), $payload['label']);
+        $this->assertEquals(0, $payload['revenue']['current']);
+        $this->assertEquals(0, $payload['revenue']['previous']);
+        $this->assertSame(0, $payload['sessions_paid']['current']);
         $this->assertEquals(['cash' => 0, 'mpesa' => 0], $payload['by_method']);
         $this->assertSame([], $payload['top_items']);
         $this->assertSame(0, $payload['cancellations']);
@@ -108,12 +109,12 @@ class ReportTest extends TestCase
             ->json();
 
         // Today = (150 × 2) + (80 × 3) = 540
-        $this->assertEquals(540, $payload['revenue']['today']);
+        $this->assertEquals(540, $payload['revenue']['current']);
         // Yesterday = 150 × 1 = 150
-        $this->assertEquals(150, $payload['revenue']['yesterday']);
+        $this->assertEquals(150, $payload['revenue']['previous']);
 
-        $this->assertSame(2, $payload['sessions_paid']['today']);
-        $this->assertSame(1, $payload['sessions_paid']['yesterday']);
+        $this->assertSame(2, $payload['sessions_paid']['current']);
+        $this->assertSame(1, $payload['sessions_paid']['previous']);
 
         $this->assertEquals(300, $payload['by_method']['cash']);
         $this->assertEquals(240, $payload['by_method']['mpesa']);
@@ -169,8 +170,8 @@ class ReportTest extends TestCase
             ->assertOk()
             ->json();
 
-        $this->assertEquals(0, $payload['revenue']['today']);
-        $this->assertSame(0, $payload['sessions_paid']['today']);
+        $this->assertEquals(0, $payload['revenue']['current']);
+        $this->assertSame(0, $payload['sessions_paid']['current']);
     }
 
     public function test_cancellations_count_today_only(): void
@@ -216,6 +217,41 @@ class ReportTest extends TestCase
 
         $this->actingAs($waiter, 'sanctum')
             ->getJson('/api/admin/reports/today')
+            ->assertForbidden();
+    }
+
+    // ----- Monthly report -----
+
+    public function test_monthly_report_aggregates_within_calendar_month_only(): void
+    {
+        $waiter = User::factory()->waiter()->create();
+        $thisMonthDay1 = $this->today->copy()->startOfMonth()->setTime(10, 0);
+        $thisMonthMid = $this->today->copy()->setTime(10, 0);
+        $lastMonthEnd = $this->today->copy()->startOfMonth()->subDay()->setTime(15, 0);
+
+        $this->paidSession($waiter, $thisMonthDay1, [['chips', 1]]);   // 150 in current month
+        $this->paidSession($waiter, $thisMonthMid, [['soda', 2]]);     // 160 in current month
+        $this->paidSession($waiter, $lastMonthEnd, [['chips', 5]]);    // 750 in previous month
+
+        $payload = $this->actingAs($this->admin, 'sanctum')
+            ->getJson('/api/admin/reports/month')
+            ->assertOk()
+            ->json();
+
+        $this->assertSame('month', $payload['period']);
+        $this->assertSame($this->today->format('Y-m'), $payload['label']);
+        $this->assertEquals(310, $payload['revenue']['current']);
+        $this->assertEquals(750, $payload['revenue']['previous']);
+        $this->assertSame(2, $payload['sessions_paid']['current']);
+        $this->assertSame(1, $payload['sessions_paid']['previous']);
+    }
+
+    public function test_non_admin_cannot_access_monthly_report(): void
+    {
+        $waiter = User::factory()->waiter()->create();
+
+        $this->actingAs($waiter, 'sanctum')
+            ->getJson('/api/admin/reports/month')
             ->assertForbidden();
     }
 

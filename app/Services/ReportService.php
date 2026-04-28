@@ -18,22 +18,50 @@ class ReportService
      */
     public function dailySnapshot(?CarbonImmutable $date = null): array
     {
-        $today = $date ?? CarbonImmutable::today();
-        $yesterday = $today->subDay();
+        $current = $date ?? CarbonImmutable::today();
+        $previous = $current->subDay();
 
         return [
-            'date' => $today->toDateString(),
+            'period' => 'day',
+            'label' => $current->toDateString(),
             'revenue' => [
-                'today' => $this->revenueOn($today),
-                'yesterday' => $this->revenueOn($yesterday),
+                'current' => $this->revenueOn($current),
+                'previous' => $this->revenueOn($previous),
             ],
             'sessions_paid' => [
-                'today' => $this->sessionsPaidOn($today),
-                'yesterday' => $this->sessionsPaidOn($yesterday),
+                'current' => $this->sessionsPaidOn($current),
+                'previous' => $this->sessionsPaidOn($previous),
             ],
-            'by_method' => $this->revenueByMethodOn($today),
-            'top_items' => $this->topItemsOn($today, limit: 5),
-            'cancellations' => $this->cancellationsOn($today),
+            'by_method' => $this->revenueByMethodOn($current),
+            'top_items' => $this->topItemsOn($current, limit: 5),
+            'cancellations' => $this->cancellationsOn($current),
+        ];
+    }
+
+    /**
+     * Snapshot for the calendar month containing $date (defaults to current
+     * month). Same shape as dailySnapshot, with previous-month comparison
+     * and a wider top-items list.
+     */
+    public function monthlySnapshot(?CarbonImmutable $date = null): array
+    {
+        $current = ($date ?? CarbonImmutable::today())->startOfMonth();
+        $previous = $current->subMonth();
+
+        return [
+            'period' => 'month',
+            'label' => $current->format('Y-m'),
+            'revenue' => [
+                'current' => $this->revenueIn($this->monthBounds($current)),
+                'previous' => $this->revenueIn($this->monthBounds($previous)),
+            ],
+            'sessions_paid' => [
+                'current' => $this->sessionsPaidIn($this->monthBounds($current)),
+                'previous' => $this->sessionsPaidIn($this->monthBounds($previous)),
+            ],
+            'by_method' => $this->revenueByMethodIn($this->monthBounds($current)),
+            'top_items' => $this->topItemsIn($this->monthBounds($current), limit: 10),
+            'cancellations' => $this->cancellationsIn($this->monthBounds($current)),
         ];
     }
 
@@ -84,26 +112,60 @@ class ReportService
 
     private function revenueOn(CarbonImmutable $date): float
     {
-        return (float) Payment::query()
-            ->where('status', 'completed')
-            ->whereBetween('confirmed_at', $this->dayBounds($date))
-            ->sum('amount');
+        return $this->revenueIn($this->dayBounds($date));
     }
 
     private function sessionsPaidOn(CarbonImmutable $date): int
     {
-        return CustomerSession::query()
-            ->where('status', 'paid')
-            ->whereBetween('closed_at', $this->dayBounds($date))
-            ->count();
+        return $this->sessionsPaidIn($this->dayBounds($date));
     }
 
     private function revenueByMethodOn(CarbonImmutable $date): array
     {
+        return $this->revenueByMethodIn($this->dayBounds($date));
+    }
+
+    private function topItemsOn(CarbonImmutable $date, int $limit): array
+    {
+        return $this->topItemsIn($this->dayBounds($date), $limit);
+    }
+
+    private function cancellationsOn(CarbonImmutable $date): int
+    {
+        return $this->cancellationsIn($this->dayBounds($date));
+    }
+
+    /**
+     * @param  array{0: Carbon, 1: Carbon}  $bounds
+     */
+    private function revenueIn(array $bounds): float
+    {
+        return (float) Payment::query()
+            ->where('status', 'completed')
+            ->whereBetween('confirmed_at', $bounds)
+            ->sum('amount');
+    }
+
+    /**
+     * @param  array{0: Carbon, 1: Carbon}  $bounds
+     */
+    private function sessionsPaidIn(array $bounds): int
+    {
+        return CustomerSession::query()
+            ->where('status', 'paid')
+            ->whereBetween('closed_at', $bounds)
+            ->count();
+    }
+
+    /**
+     * @param  array{0: Carbon, 1: Carbon}  $bounds
+     */
+    private function revenueByMethodIn(array $bounds): array
+    {
         $rows = Payment::query()
             ->selectRaw('method, SUM(amount) as total')
             ->where('status', 'completed')
-            ->whereBetween('confirmed_at', $this->dayBounds($date))
+            ->whereBetween('confirmed_at', $bounds)
             ->groupBy('method')
             ->get();
 
@@ -114,15 +176,17 @@ class ReportService
         return $byMethod;
     }
 
-    private function topItemsOn(CarbonImmutable $date, int $limit): array
+    /**
+     * @param  array{0: Carbon, 1: Carbon}  $bounds
+     */
+    private function topItemsIn(array $bounds, int $limit): array
     {
-        // Orders that were actually delivered, on sessions paid today.
         return Order::query()
             ->join('customer_sessions', 'orders.session_id', '=', 'customer_sessions.id')
             ->join('menu_items', 'orders.menu_item_id', '=', 'menu_items.id')
             ->where('orders.status', 'delivered')
             ->where('customer_sessions.status', 'paid')
-            ->whereBetween('customer_sessions.closed_at', $this->dayBounds($date))
+            ->whereBetween('customer_sessions.closed_at', $bounds)
             ->groupBy('menu_items.id', 'menu_items.name')
             ->selectRaw('menu_items.name as name, SUM(orders.quantity) as quantity, SUM(orders.quantity * orders.unit_price) as revenue')
             ->orderByDesc('quantity')
@@ -136,10 +200,13 @@ class ReportService
             ->all();
     }
 
-    private function cancellationsOn(CarbonImmutable $date): int
+    /**
+     * @param  array{0: Carbon, 1: Carbon}  $bounds
+     */
+    private function cancellationsIn(array $bounds): int
     {
         return CancellationLog::query()
-            ->whereBetween('cancelled_at', $this->dayBounds($date))
+            ->whereBetween('cancelled_at', $bounds)
             ->count();
     }
 
@@ -149,5 +216,13 @@ class ReportService
     private function dayBounds(CarbonImmutable $date): array
     {
         return [Carbon::instance($date->startOfDay()), Carbon::instance($date->endOfDay())];
+    }
+
+    /**
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    private function monthBounds(CarbonImmutable $monthStart): array
+    {
+        return [Carbon::instance($monthStart->startOfMonth()), Carbon::instance($monthStart->endOfMonth())];
     }
 }

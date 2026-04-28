@@ -44,34 +44,45 @@
         <!-- Reports -->
         <section x-show="tab === 'reports'" x-cloak>
             <div class="flex items-center justify-between mb-3">
-                <h2 class="font-semibold text-slate-800">Today's snapshot</h2>
-                <span class="text-xs text-slate-500" x-text="report ? report.date : ''"></span>
+                <h2 class="font-semibold text-slate-800">
+                    <span x-text="reportPeriod === 'day' ? 'Today\'s snapshot' : 'This month\'s snapshot'"></span>
+                </h2>
+                <div class="flex gap-1 text-xs">
+                    <button @click="setReportPeriod('day')"
+                            :class="reportPeriod === 'day' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600'"
+                            class="rounded px-3 py-1">Today</button>
+                    <button @click="setReportPeriod('month')"
+                            :class="reportPeriod === 'month' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600'"
+                            class="rounded px-3 py-1">This month</button>
+                </div>
             </div>
 
             <template x-if="report">
                 <div class="space-y-3">
+                    <div class="text-xs text-slate-500 mb-1" x-text="report.label"></div>
+
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <div class="bg-white rounded-lg border border-slate-200 p-4 md:col-span-1">
-                            <div class="text-xs uppercase tracking-wide text-slate-500">Revenue today</div>
+                            <div class="text-xs uppercase tracking-wide text-slate-500" x-text="'Revenue ' + currentLabel(report.period)"></div>
                             <div class="text-2xl font-semibold text-slate-800 mt-1">
-                                KES <span x-text="formatKes(report.revenue.today)"></span>
+                                KES <span x-text="formatKes(report.revenue.current)"></span>
                             </div>
                             <div class="text-xs mt-1"
-                                 :class="deltaClass(report.revenue.today, report.revenue.yesterday)"
-                                 x-text="deltaLabel(report.revenue.today, report.revenue.yesterday) + ' vs yesterday (KES ' + formatKes(report.revenue.yesterday) + ')'"></div>
+                                 :class="deltaClass(report.revenue.current, report.revenue.previous)"
+                                 x-text="deltaLabel(report.revenue.current, report.revenue.previous) + ' vs ' + previousLabel(report.period) + ' (KES ' + formatKes(report.revenue.previous) + ')'"></div>
                         </div>
 
                         <div class="bg-white rounded-lg border border-slate-200 p-4">
                             <div class="text-xs uppercase tracking-wide text-slate-500">Sessions paid</div>
-                            <div class="text-2xl font-semibold text-slate-800 mt-1" x-text="report.sessions_paid.today"></div>
+                            <div class="text-2xl font-semibold text-slate-800 mt-1" x-text="report.sessions_paid.current"></div>
                             <div class="text-xs text-slate-500 mt-1"
-                                 x-text="'yesterday: ' + report.sessions_paid.yesterday"></div>
+                                 x-text="previousLabel(report.period) + ': ' + report.sessions_paid.previous"></div>
                         </div>
 
                         <div class="bg-white rounded-lg border border-slate-200 p-4">
                             <div class="text-xs uppercase tracking-wide text-slate-500">Cancellations</div>
                             <div class="text-2xl font-semibold text-slate-800 mt-1" x-text="report.cancellations"></div>
-                            <div class="text-xs text-slate-500 mt-1">today</div>
+                            <div class="text-xs text-slate-500 mt-1" x-text="currentLabel(report.period)"></div>
                         </div>
                     </div>
 
@@ -93,7 +104,7 @@
                         <div class="bg-white rounded-lg border border-slate-200 p-4">
                             <div class="text-xs uppercase tracking-wide text-slate-500 mb-3">Top items</div>
                             <template x-if="report.top_items.length === 0">
-                                <div class="text-xs text-slate-400 italic">No items sold yet today.</div>
+                                <div class="text-xs text-slate-400 italic">No items sold yet.</div>
                             </template>
                             <div class="space-y-1.5 text-sm">
                                 <template x-for="item in report.top_items" :key="item.name">
@@ -373,6 +384,7 @@
                 resources: [],
                 cancellations: [],
                 report: null,
+                reportPeriod: 'day',
 
                 restockAmounts: {},
                 restockReasons: {},
@@ -401,7 +413,7 @@
                             api('/admin/menu-items'),
                             api('/admin/resources'),
                             api('/admin/cancellations'),
-                            api('/admin/reports/today'),
+                            api('/admin/reports/' + (this.reportPeriod === 'day' ? 'today' : 'month')),
                         ]);
                         this.staff = staff;
                         this.menuItems = menu;
@@ -413,22 +425,41 @@
                     }
                 },
 
+                async setReportPeriod(period) {
+                    if (this.reportPeriod === period) return;
+                    this.reportPeriod = period;
+                    this.report = null;
+                    try {
+                        this.report = await api('/admin/reports/' + (period === 'day' ? 'today' : 'month'));
+                    } catch (e) {
+                        this.error = e.message;
+                    }
+                },
+
+                currentLabel(period) {
+                    return period === 'day' ? 'today' : 'this month';
+                },
+
+                previousLabel(period) {
+                    return period === 'day' ? 'yesterday' : 'last month';
+                },
+
                 formatKes(n) {
                     return Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                 },
 
-                deltaLabel(today, yesterday) {
-                    if (!yesterday || yesterday === 0) {
-                        return today > 0 ? '+new today' : 'no activity';
+                deltaLabel(current, previous) {
+                    if (!previous || previous === 0) {
+                        return current > 0 ? '+new' : 'no activity';
                     }
-                    const pct = ((today - yesterday) / yesterday) * 100;
+                    const pct = ((current - previous) / previous) * 100;
                     const sign = pct >= 0 ? '+' : '';
                     return sign + pct.toFixed(1) + '%';
                 },
 
-                deltaClass(today, yesterday) {
-                    if (today === yesterday) return 'text-slate-500';
-                    return today > yesterday ? 'text-emerald-600' : 'text-red-600';
+                deltaClass(current, previous) {
+                    if (current === previous) return 'text-slate-500';
+                    return current > previous ? 'text-emerald-600' : 'text-red-600';
                 },
 
                 async createStaff() {

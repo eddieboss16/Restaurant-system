@@ -201,4 +201,9 @@ class AdminController extends Controller
     {
         return response()->json($reports->dailySnapshot());
     }
+
+    public function monthlyReport(ReportService $reports): JsonResponse
+    {
+        return response()->json($reports->monthlySnapshot());
+    }
 }

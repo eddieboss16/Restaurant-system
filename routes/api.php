@@ -68,5 +68,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/cancellations', [AdminController::class, 'listCancellations']);
 
         Route::get('/reports/today', [AdminController::class, 'dailyReport']);
+        Route::get('/reports/month', [AdminController::class, 'monthlyReport']);
     });
 });

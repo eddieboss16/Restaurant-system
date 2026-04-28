@@ -1,79 +1,91 @@
-# CLAUDE.md
+# Restaurant System
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## Project status
-
-Despite the directory name `restaurant-system`, this is currently an **unmodified Laravel 12 skeleton**. No restaurant domain exists yet: `app/Models/` contains only `User.php`, `app/Http/Controllers/` has only the empty base `Controller.php`, `routes/web.php` serves a single `welcome` view, and migrations are just the default users/cache/jobs tables. When adding features, you are building the domain from scratch — do not go hunting for existing `Menu`, `Order`, `Reservation`, etc. models; they haven't been written.
-
-The bundled `README.md` is the generic Laravel marketing README and contains no project-specific information.
+Single-restaurant POS targeting Kenyan small-restaurant operators. Custom-built (not SaaS), web-based, intended to run on the restaurant's own hardware.
 
 ## Stack
 
-- **PHP 8.2+** with **Laravel 12** (see `composer.json`). Laravel 12 uses the streamlined `bootstrap/app.php` configuration style — there is no `app/Http/Kernel.php`, no `app/Console/Kernel.php`, and no `app/Exceptions/Handler.php`. Middleware, routing, and exception handling are all configured via the fluent builder in `bootstrap/app.php`. Console commands live in `routes/console.php`.
-- **Vite 7** + **Tailwind CSS v4** (via `@tailwindcss/vite` plugin, not a PostCSS config) for frontend assets.
-- **SQLite** by default — `database/database.sqlite` is committed-adjacent and created on setup. Tests run against `:memory:` SQLite (see `phpunit.xml`).
-- **PHPUnit 11** for tests. Pest is *not* installed despite `pestphp/pest-plugin` being in `allow-plugins`.
+- **Laravel 12** (PHP 8.2+), Sanctum for API tokens
+- **Alpine.js + Tailwind** via Vite for the dashboards (no React/Vue)
+- **MySQL** in dev/prod (DB_CONNECTION=mysql, DB_DATABASE=restaurant_management). Tests use **in-memory SQLite** (phpunit.xml).
+- **Daraja API** integration for M-Pesa STK push
+- Windows is the primary dev environment — beware Unix-only PHP extensions like pcntl (Pail won't run; `composer dev` was edited to drop it; `composer dev:full` is the Linux/macOS variant).
 
-## Commands
+## Roles and dashboards
 
-Install / bootstrap from a clean clone:
+Four roles, each lands on its own dashboard at login. Admin is a wildcard — passes every `role:` middleware via [EnsureRole](app/Http/Middleware/EnsureRole.php).
 
-```bash
-composer setup        # composer install, .env, key:generate, migrate, npm install, npm run build
+| Role | Lands at | Can do |
+|---|---|---|
+| `admin` | `/admin/dashboard` | everything; staff/menu/inventory CRUD; reports; reaches every other dashboard via cross-nav |
+| `manager` | `/manager/dashboard` | reports (P&L), expense ledger CRUD, low-stock warnings; can also reach floor + kitchen views |
+| `waiter` | `/waiter/dashboard` | open sessions, add orders, deliver, collect payment (cash + STK + manual mpesa code); sees own day's totals |
+| `kitchen` | `/kitchen/dashboard` | queue (pending → preparing → ready), history of last 50 delivered |
+
+Primary admin (lowest-id user with role=admin) is protected — other admins cannot demote or deactivate them.
+
+## Domain flow
+
+A customer = a `customer_session`. Lifecycle: `open → ordered → served → paid`.
+
+1. Waiter opens a session (free-text customer label like "lady in red")
+2. Adds menu items → orders are `pending`. [InventoryService](app/Services/InventoryService.php) deducts recipe ingredients from `resources` inside a `lockForUpdate` transaction. Order is rejected (422) with a specific message if any ingredient is short.
+3. Kitchen flips status: `pending → preparing → ready`
+4. Waiter marks `delivered`. When all orders are delivered or cancelled, the session flips to `served`.
+5. Payment: cash (instant), manual mpesa code (instant), or STK push (async — see below). Session flips to `paid`, disappears from active lists.
+
+Cancellations require a 5-char reason and are logged to `cancellation_logs`.
+
+## M-Pesa STK push
+
+Real Daraja integration. Setup needed in `.env`:
+```
+MPESA_ENV=sandbox|production
+MPESA_CONSUMER_KEY=...
+MPESA_CONSUMER_SECRET=...
+MPESA_SHORTCODE=174379               # 174379 = Safaricom sandbox paybill
+MPESA_PASSKEY=...                    # sandbox default in config/mpesa.php
+MPESA_CALLBACK_URL=https://.../api/mpesa/callback
 ```
 
-Day-to-day development (runs server + queue worker + log tail + Vite concurrently via `concurrently`):
+Callback URL must be publicly reachable. For local dev: `ngrok http 8000`. The route `/api/mpesa/callback` is public (no auth) — Daraja calls it directly.
+
+Stuck STK pushes (no callback received) are auto-failed after 5 minutes by `php artisan mpesa:expire-stuck-stk` (scheduled every minute in `routes/console.php`).
+
+## Conventions
+
+- **Service classes** for non-trivial domain logic: [InventoryService](app/Services/InventoryService.php), [SessionService](app/Services/SessionService.php), [ReportService](app/Services/ReportService.php), [MpesaService](app/Services/MpesaService.php). Controllers stay thin.
+- **Policies** for session-level auth: [CustomerSessionPolicy](app/Policies/CustomerSessionPolicy.php). Manager and admin both pass elevated checks (act on any non-paid session). Waiter only acts on their own.
+- **Role middleware** always lists the explicit allowed roles; admin wildcards via [EnsureRole](app/Http/Middleware/EnsureRole.php). Reports/expenses/low-stock live in the `role:manager` group (admin still passes).
+- **Reports return a unified shape** (`period`, `label`, `revenue.{current,previous}`, `expenses.{current,previous}`, `net`, `by_method`, `top_items`, `cancellations`, `expenses_by_category`) so daily and monthly views share one template. See [ReportService](app/Services/ReportService.php).
+- **Tests use [RefreshDatabase](https://laravel.com/docs/12.x/database-testing#resetting-the-database-after-each-test) + a `SeedsRestaurantData` trait** in [tests/Concerns/](tests/Concerns/). Pin time via `Carbon::setTestNow()` for date-sensitive tests.
+- **JSON roundtrip turns integer-valued floats into `int`** — use `assertEquals` (loose) not `assertSame` for numeric values pulled from `.json()` calls in tests.
+- **Date columns** must be cast as `'date:Y-m-d'` not just `'date'` — SQLite stores TEXT and the default cast preserves the time portion, breaking date-range string comparisons.
+
+## Common commands
 
 ```bash
-composer dev
+composer setup                   # first-time install + migrate + npm install + build
+composer dev                     # server + queue + vite (windows-friendly, no pail)
+composer dev:full                # adds pail (Linux/macOS only -- needs pcntl)
+composer test                    # config:clear + phpunit (~22s for 86 tests)
+php artisan migrate              # apply pending migrations
+php artisan optimize:clear       # clear cached config/routes/views (run after schema or route changes)
+php artisan schedule:work        # local scheduler -- needed for stuck-STK cleanup
 ```
 
-Individual pieces when you don't want the full stack:
+## Working on this codebase
 
-```bash
-php artisan serve
-php artisan queue:listen --tries=1 --timeout=0
-php artisan pail --timeout=0    # real-time log tail
-npm run dev                     # Vite dev server
-npm run build                   # production asset build
-```
+- **Default to one commit per logical change.** Mixed commits (feature + unrelated cleanup) are hard to revert.
+- **Flag bugs you spot outside the request scope rather than silently fixing them.** Drive-by fixes balloon the change surface.
+- **Suggest the simpler solution first.** Add complexity only when it earns its keep.
+- **Never silently skip a failing test.** Surface it. No `markTestSkipped` / `xit` / `--no-verify` to hide failures.
+- **Explain *why* in commits, not just what** — the diff already shows what.
 
-Tests (the `composer test` script clears config before running, which matters because `phpunit.xml` injects a test-only env):
+## Known gaps (deliberate non-scope, not bugs)
 
-```bash
-composer test                                          # full suite
-php artisan test --filter=ExampleTest                  # single test class
-php artisan test --filter='ExampleTest::test_that_true_is_true'   # single method
-php artisan test tests/Feature/ExampleTest.php         # single file
-php artisan test --testsuite=Unit                      # suite only
-```
-
-Database:
-
-```bash
-php artisan migrate
-php artisan migrate:fresh --seed
-php artisan make:migration create_foo_table
-```
-
-Formatting (Pint is in `require-dev` but not wired into a composer script):
-
-```bash
-vendor/bin/pint           # format
-vendor/bin/pint --test    # check without writing
-```
-
-StyleCI is also configured (`.styleci.yml`, Laravel preset) for CI-side formatting.
-
-## Testing notes
-
-- `phpunit.xml` forces the test environment to in-memory SQLite, `sync` queue, `array` cache/session/mail, and `BCRYPT_ROUNDS=4`. Do not rely on the real `.env` values inside tests.
-- Two suites are defined: `Unit` and `Feature`. Use `--testsuite=Unit|Feature` to scope.
-- CI (`.github/workflows/tests.yml`) runs the suite against PHP 8.2, 8.3, and 8.4 on every push to `master` and on PRs — keep changes compatible across all three.
-
-## Conventions worth knowing
-
-- PSR-4 roots: `App\` → `app/`, `Database\Factories\` → `database/factories/`, `Database\Seeders\` → `database/seeders/`, `Tests\` → `tests/`.
-- Health check endpoint is wired at `/up` via `bootstrap/app.php` (`health: '/up'`).
-- When adding middleware, routes, or exception handlers, edit `bootstrap/app.php` — not files under `app/Http/` or `app/Exceptions/`.
+- No receipt printing (Bluetooth ESC/POS would close this).
+- No daily WhatsApp/SMS summary to the owner.
+- No paid-session history view (sessions disappear once `paid`).
+- No "online now" presence indicator on Staff list.
+- `users.pin` column is seeded for waiters but unused — either build a shift-switcher or drop it.
+- Single-tenant only — no `restaurant_id` scoping on models.

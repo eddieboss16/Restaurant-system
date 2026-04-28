@@ -30,6 +30,19 @@
           x-data="managerDashboard()"
           x-init="init()">
 
+        <!-- Low-stock warning -->
+        <div x-show="lowStock.length > 0" x-cloak
+             class="mb-4 bg-amber-50 border border-amber-300 rounded-lg p-3 text-sm">
+            <div class="font-medium text-amber-900">Low stock — tell admin to restock</div>
+            <div class="text-xs text-amber-800 mt-0.5">
+                <template x-for="(r, idx) in lowStock" :key="r.id">
+                    <span>
+                        <span x-text="r.name + ' (' + Number(r.current_stock).toFixed(0) + r.unit + ' left, threshold ' + Number(r.low_stock_threshold).toFixed(0) + r.unit + ')'"></span><span x-show="idx < lowStock.length - 1">, </span>
+                    </span>
+                </template>
+            </div>
+        </div>
+
         <div class="flex gap-1 mb-4 border-b border-slate-200">
             <template x-for="t in tabs" :key="t.key">
                 <button @click="setTab(t.key)"
@@ -231,12 +244,20 @@
                 expenses: [],
                 categories: ['supplies', 'salaries', 'utilities', 'rent', 'transport', 'other'],
 
+                lowStock: [],
+
                 newExpenseOpen: false,
                 newExpense: { amount: 0, category: 'supplies', description: '', incurred_on: TODAY },
 
                 async init() {
-                    await this.loadReport();
-                    await this.loadExpenses();
+                    await Promise.all([this.loadReport(), this.loadExpenses(), this.loadLowStock()]);
+                    setInterval(() => this.loadLowStock(), 60000);
+                },
+
+                async loadLowStock() {
+                    try {
+                        this.lowStock = await api('/inventory/low-stock');
+                    } catch (e) { /* not fatal */ }
                 },
 
                 async setTab(key) {

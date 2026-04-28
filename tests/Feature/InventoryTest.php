@@ -93,6 +93,35 @@ class InventoryTest extends TestCase
         $this->assertSame(5000.0, (float) $this->resources['oil']->fresh()->current_stock);
     }
 
+    public function test_low_stock_endpoint_returns_only_resources_at_or_below_threshold(): void
+    {
+        // potatoes seeded with 10000g, threshold 2000 -- not low.
+        // oil seeded with 5000ml, threshold 1000 -- not low.
+        $this->resources['potatoes']->update(['current_stock' => 1500]); // now low
+        $this->resources['oil']->update(['current_stock' => 1000]);      // exactly at threshold = low
+
+        $manager = User::factory()->manager()->create();
+
+        $payload = $this->actingAs($manager, 'sanctum')
+            ->getJson('/api/inventory/low-stock')
+            ->assertOk()
+            ->json();
+
+        $names = array_column($payload, 'name');
+        $this->assertContains('potatoes', $names);
+        $this->assertContains('oil', $names);
+        $this->assertCount(2, $payload);
+    }
+
+    public function test_low_stock_endpoint_blocked_for_waiter_and_kitchen(): void
+    {
+        $waiter = User::factory()->waiter()->create();
+        $kitchen = User::factory()->kitchen()->create();
+
+        $this->actingAs($waiter, 'sanctum')->getJson('/api/inventory/low-stock')->assertForbidden();
+        $this->actingAs($kitchen, 'sanctum')->getJson('/api/inventory/low-stock')->assertForbidden();
+    }
+
     public function test_partial_failure_in_batch_rolls_back_all_orders_and_deductions(): void
     {
         $waiter = User::factory()->waiter()->create();

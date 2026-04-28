@@ -30,6 +30,22 @@
           x-data="adminDashboard()"
           x-init="init()">
 
+        <!-- Low-stock warning -->
+        <div x-show="lowStock.length > 0" x-cloak
+             class="mb-4 bg-amber-50 border border-amber-300 rounded-lg p-3 flex items-start justify-between text-sm">
+            <div class="flex-1">
+                <div class="font-medium text-amber-900">Low stock</div>
+                <div class="text-xs text-amber-800 mt-0.5">
+                    <template x-for="(r, idx) in lowStock" :key="r.id">
+                        <span>
+                            <span x-text="r.name + ' (' + Number(r.current_stock).toFixed(0) + r.unit + ' left, threshold ' + Number(r.low_stock_threshold).toFixed(0) + r.unit + ')'"></span><span x-show="idx < lowStock.length - 1">, </span>
+                        </span>
+                    </template>
+                </div>
+            </div>
+            <button @click="tab = 'resources'" class="text-xs text-amber-900 underline ml-3 shrink-0">Restock</button>
+        </div>
+
         <div class="flex gap-1 mb-4 border-b border-slate-200">
             <template x-for="t in tabs" :key="t.key">
                 <button @click="tab = t.key"
@@ -385,6 +401,7 @@
                 cancellations: [],
                 report: null,
                 reportPeriod: 'day',
+                lowStock: [],
 
                 restockAmounts: {},
                 restockReasons: {},
@@ -408,18 +425,20 @@
 
                 async loadAll() {
                     try {
-                        const [staff, menu, res, canc, report] = await Promise.all([
+                        const [staff, menu, res, canc, report, lowStock] = await Promise.all([
                             api('/admin/staff'),
                             api('/admin/menu-items'),
                             api('/admin/resources'),
                             api('/admin/cancellations'),
                             api('/reports/' + (this.reportPeriod === 'day' ? 'today' : 'month')),
+                            api('/inventory/low-stock'),
                         ]);
                         this.staff = staff;
                         this.menuItems = menu;
                         this.resources = res;
                         this.cancellations = canc;
                         this.report = report;
+                        this.lowStock = lowStock;
                     } catch (e) {
                         this.error = e.message;
                     }

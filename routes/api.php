@@ -53,8 +53,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/kitchen/history', [OrderController::class, 'kitchenHistory']);
     });
 
-    // Expenses + reports: manager records/views; admin reaches both via the
-    // role-wildcard bypass in EnsureRole.
+    // Expenses + reports + low-stock: manager records/views; admin reaches
+    // all via the role-wildcard bypass in EnsureRole.
     Route::middleware('role:manager')->group(function () {
         Route::get('/expenses', [ExpenseController::class, 'index']);
         Route::post('/expenses', [ExpenseController::class, 'store']);
@@ -63,6 +63,11 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('/reports/today', [AdminController::class, 'dailyReport']);
         Route::get('/reports/month', [AdminController::class, 'monthlyReport']);
+
+        Route::get('/inventory/low-stock', fn () => \App\Models\Resource::query()
+            ->whereColumn('current_stock', '<=', 'low_stock_threshold')
+            ->orderBy('name')
+            ->get(['id', 'name', 'unit', 'current_stock', 'low_stock_threshold']));
     });
 
     Route::middleware('role:admin')->prefix('admin')->group(function () {

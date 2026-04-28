@@ -43,23 +43,42 @@ class ReportService
     public function waiterToday(User $waiter, ?CarbonImmutable $date = null): array
     {
         $today = $date ?? CarbonImmutable::today();
+        $bounds = $this->dayBounds($today);
 
-        $sessionsPaid = CustomerSession::query()
+        $sessions = CustomerSession::query()
+            ->with([
+                'orders' => fn ($q) => $q->where('status', '!=', 'cancelled'),
+                'orders.menuItem:id,name',
+                'payment',
+            ])
             ->where('waiter_id', $waiter->id)
             ->where('status', 'paid')
-            ->whereBetween('closed_at', $this->dayBounds($today))
-            ->count();
+            ->whereBetween('closed_at', $bounds)
+            ->orderByDesc('closed_at')
+            ->get();
 
         $revenue = (float) Payment::query()
             ->where('collected_by', $waiter->id)
             ->where('status', 'completed')
-            ->whereBetween('confirmed_at', $this->dayBounds($today))
+            ->whereBetween('confirmed_at', $bounds)
             ->sum('amount');
 
         return [
             'date' => $today->toDateString(),
-            'sessions_paid' => $sessionsPaid,
+            'sessions_paid' => $sessions->count(),
             'revenue_collected' => $revenue,
+            'sessions' => $sessions->map(fn ($s) => [
+                'id' => $s->id,
+                'customer_label' => $s->customer_label,
+                'closed_at' => $s->closed_at,
+                'total' => (float) $s->orders->sum(fn ($o) => $o->quantity * $o->unit_price),
+                'method' => $s->payment?->method,
+                'mpesa_code' => $s->payment?->mpesa_code,
+                'items' => $s->orders->map(fn ($o) => [
+                    'name' => $o->menuItem->name,
+                    'quantity' => $o->quantity,
+                ])->all(),
+            ])->all(),
         ];
     }
 

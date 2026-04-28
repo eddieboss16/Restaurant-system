@@ -239,6 +239,35 @@ class ReportTest extends TestCase
         $this->assertEquals(380, $payload['revenue_collected']);
     }
 
+    public function test_me_today_includes_sessions_with_items_total_and_method(): void
+    {
+        $waiter = User::factory()->waiter()->create();
+
+        $this->paidSession(
+            $waiter,
+            $this->today->copy()->setTime(10, 0),
+            [['chips', 2], ['soda', 1]],
+            method: 'mpesa',
+            mpesaCode: 'NLJ7RT61SV'
+        );
+
+        $payload = $this->actingAs($waiter, 'sanctum')
+            ->getJson('/api/me/today')
+            ->assertOk()
+            ->json();
+
+        $this->assertCount(1, $payload['sessions']);
+
+        $session = $payload['sessions'][0];
+        $this->assertEquals(380, $session['total']);
+        $this->assertSame('mpesa', $session['method']);
+        $this->assertSame('NLJ7RT61SV', $session['mpesa_code']);
+
+        $itemNames = array_column($session['items'], 'name');
+        $this->assertContains('Chips', $itemNames);
+        $this->assertContains('Soda', $itemNames);
+    }
+
     public function test_me_today_excludes_yesterdays_work(): void
     {
         $waiter = User::factory()->waiter()->create();

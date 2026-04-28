@@ -35,18 +35,50 @@
           x-init="init()">
 
         <!-- Today strip -->
-        <div class="bg-white border border-slate-200 rounded-lg px-4 py-2 mb-4 flex items-center justify-between text-sm">
-            <div class="text-slate-500">
-                <span class="uppercase tracking-wide text-xs">Today</span>
-            </div>
-            <div class="flex gap-6 text-slate-700">
-                <div>
-                    <span class="font-semibold" x-text="myToday ? myToday.sessions_paid : '—'"></span>
-                    <span class="text-xs text-slate-500 ml-1">sessions paid</span>
+        <div class="bg-white border border-slate-200 rounded-lg mb-4">
+            <div class="px-4 py-2 flex items-center justify-between text-sm">
+                <div class="text-slate-500">
+                    <span class="uppercase tracking-wide text-xs">Today</span>
                 </div>
-                <div>
-                    KES <span class="font-semibold" x-text="myToday ? formatMoney(myToday.revenue_collected) : '—'"></span>
-                    <span class="text-xs text-slate-500 ml-1">collected</span>
+                <div class="flex gap-6 text-slate-700 items-center">
+                    <div>
+                        <span class="font-semibold" x-text="myToday ? myToday.sessions_paid : '—'"></span>
+                        <span class="text-xs text-slate-500 ml-1">sessions paid</span>
+                    </div>
+                    <div>
+                        KES <span class="font-semibold" x-text="myToday ? formatMoney(myToday.revenue_collected) : '—'"></span>
+                        <span class="text-xs text-slate-500 ml-1">collected</span>
+                    </div>
+                    <button @click="todayExpanded = !todayExpanded"
+                            x-show="myToday && myToday.sessions_paid > 0"
+                            class="text-xs text-slate-500 hover:text-slate-800 underline"
+                            x-text="todayExpanded ? 'hide' : 'view'"></button>
+                </div>
+            </div>
+            <div x-show="todayExpanded && myToday" x-cloak class="border-t border-slate-100">
+                <div class="divide-y divide-slate-100">
+                    <template x-for="s in (myToday?.sessions || [])" :key="s.id">
+                        <div class="px-4 py-2 text-sm flex items-start justify-between">
+                            <div class="flex-1">
+                                <div class="text-slate-700">
+                                    <span x-text="s.customer_label || 'unlabeled'"></span>
+                                    <span class="text-xs text-slate-400 ml-1" x-text="formatTime(s.closed_at)"></span>
+                                </div>
+                                <div class="text-xs text-slate-500 mt-0.5">
+                                    <template x-for="(item, idx) in s.items" :key="idx">
+                                        <span x-text="item.quantity + '× ' + item.name + (idx < s.items.length - 1 ? ', ' : '')"></span>
+                                    </template>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div class="font-medium text-slate-700" x-text="'KES ' + formatMoney(s.total)"></div>
+                                <div class="text-xs">
+                                    <span class="text-emerald-600 uppercase tracking-wide" x-text="s.method"></span>
+                                    <span x-show="s.mpesa_code" class="text-slate-400 ml-1" x-text="'· ' + s.mpesa_code"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
                 </div>
             </div>
         </div>
@@ -318,6 +350,7 @@
                 stkPollHandle: null,
 
                 myToday: null,
+                todayExpanded: false,
 
                 async init() {
                     await Promise.all([this.loadSessions(), this.loadMenu(), this.loadMyToday()]);

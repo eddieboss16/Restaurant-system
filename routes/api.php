@@ -49,6 +49,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::middleware('role:kitchen,manager')->group(function () {
         Route::get('/kitchen/queue', [OrderController::class, 'kitchenQueue']);
+        Route::get('/kitchen/history', [OrderController::class, 'kitchenHistory']);
     });
 
     Route::middleware('role:admin')->prefix('admin')->group(function () {

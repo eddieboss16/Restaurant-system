@@ -186,6 +186,57 @@ class OrderFlowTest extends TestCase
             ->assertStatus(422);
     }
 
+    public function test_kitchen_history_returns_recent_delivered_orders_only(): void
+    {
+        $waiter = User::factory()->waiter()->create();
+        $kitchen = User::factory()->kitchen()->create();
+
+        $session = CustomerSession::create([
+            'waiter_id' => $waiter->id,
+            'status' => 'served',
+            'opened_at' => now(),
+        ]);
+
+        $delivered = Order::create([
+            'session_id' => $session->id,
+            'menu_item_id' => $this->menuItems['soda']->id,
+            'quantity' => 2,
+            'unit_price' => 80,
+            'status' => 'delivered',
+        ]);
+        Order::create([
+            'session_id' => $session->id,
+            'menu_item_id' => $this->menuItems['soda']->id,
+            'quantity' => 1,
+            'unit_price' => 80,
+            'status' => 'pending',
+        ]);
+        Order::create([
+            'session_id' => $session->id,
+            'menu_item_id' => $this->menuItems['soda']->id,
+            'quantity' => 1,
+            'unit_price' => 80,
+            'status' => 'cancelled',
+        ]);
+
+        $payload = $this->actingAs($kitchen, 'sanctum')
+            ->getJson('/api/kitchen/history')
+            ->assertOk()
+            ->json();
+
+        $this->assertCount(1, $payload);
+        $this->assertSame($delivered->id, $payload[0]['id']);
+    }
+
+    public function test_kitchen_history_blocked_for_waiter_role(): void
+    {
+        $waiter = User::factory()->waiter()->create();
+
+        $this->actingAs($waiter, 'sanctum')
+            ->getJson('/api/kitchen/history')
+            ->assertForbidden();
+    }
+
     public function test_cancellation_reason_must_be_at_least_5_chars(): void
     {
         $waiter = User::factory()->waiter()->create();

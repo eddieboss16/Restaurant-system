@@ -25,6 +25,17 @@ class OrderController extends Controller
         return response()->json($orders);
     }
 
+    public function kitchenHistory(): JsonResponse
+    {
+        $orders = Order::with(['menuItem:id,name,category', 'session:id,customer_label,waiter_id', 'session.waiter:id,name'])
+            ->where('status', 'delivered')
+            ->latest('updated_at')
+            ->limit(50)
+            ->get();
+
+        return response()->json($orders);
+    }
+
     public function store(Request $request, CustomerSession $session, InventoryService $inventory): JsonResponse
     {
         $this->authorize('addOrder', $session);

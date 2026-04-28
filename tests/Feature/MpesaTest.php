@@ -376,6 +376,60 @@ class MpesaTest extends TestCase
             ->assertOk();
     }
 
+    // ----- Stuck-STK cleanup command -----
+
+    public function test_expire_stuck_stk_marks_old_pending_payments_as_failed(): void
+    {
+        $waiter = User::factory()->waiter()->create();
+        $session = $this->sessionWithDeliveredOrder($waiter);
+
+        $stuck = $this->makePendingStk($waiter, $session, 'CR-stuck', minutesAgo: 10);
+        $fresh = $this->makePendingStk($waiter, $session, 'CR-fresh', minutesAgo: 1);
+
+        $this->artisan('mpesa:expire-stuck-stk')->assertSuccessful();
+
+        $this->assertSame('failed', $stuck->fresh()->status);
+        $this->assertStringContainsString('Timed out', $stuck->fresh()->mpesa_result_desc);
+        $this->assertSame('pending', $fresh->fresh()->status);
+    }
+
+    public function test_expire_stuck_stk_does_not_touch_completed_payments(): void
+    {
+        $waiter = User::factory()->waiter()->create();
+        $session = $this->sessionWithDeliveredOrder($waiter);
+
+        $completed = Payment::create([
+            'session_id' => $session->id,
+            'method' => 'mpesa',
+            'amount' => 80,
+            'status' => 'completed',
+            'mpesa_code' => 'OLD',
+            'mpesa_checkout_request_id' => 'CR-old',
+            'collected_by' => $waiter->id,
+            'confirmed_at' => now()->subHour(),
+        ]);
+        $completed->forceFill(['created_at' => now()->subHour()])->save();
+
+        $this->artisan('mpesa:expire-stuck-stk')->assertSuccessful();
+
+        $this->assertSame('completed', $completed->fresh()->status);
+    }
+
+    private function makePendingStk(User $waiter, CustomerSession $session, string $checkoutId, int $minutesAgo): Payment
+    {
+        $payment = Payment::create([
+            'session_id' => $session->id,
+            'method' => 'mpesa',
+            'amount' => 80,
+            'status' => 'pending',
+            'mpesa_checkout_request_id' => $checkoutId,
+            'collected_by' => $waiter->id,
+        ]);
+        // created_at is not fillable; backdate it directly so the cutoff catches it.
+        $payment->forceFill(['created_at' => now()->subMinutes($minutesAgo)])->save();
+        return $payment;
+    }
+
     // ----- Helpers -----
 
     private function sessionWithDeliveredOrder(User $waiter): CustomerSession

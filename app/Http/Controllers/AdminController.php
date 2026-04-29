@@ -22,9 +22,26 @@ class AdminController extends Controller
     {
         $primaryAdminId = User::where('role', 'admin')->min('id');
 
+        // Last API call per user (sanctum auto-updates last_used_at on every
+        // authenticated request). Single query, keyed by user id.
+        $lastSeen = DB::table('personal_access_tokens')
+            ->where('tokenable_type', User::class)
+            ->groupBy('tokenable_id')
+            ->selectRaw('tokenable_id, MAX(last_used_at) as last_seen_at')
+            ->pluck('last_seen_at', 'tokenable_id');
+
+        $onlineCutoff = now()->subMinutes(15);
+
         $staff = User::orderBy('role')->orderBy('name')
             ->get(['id', 'name', 'email', 'role', 'is_active', 'pin'])
-            ->map(fn ($u) => $u->toArray() + ['is_primary_admin' => $u->id === $primaryAdminId]);
+            ->map(function ($u) use ($primaryAdminId, $lastSeen, $onlineCutoff) {
+                $seen = $lastSeen[$u->id] ?? null;
+                return $u->toArray() + [
+                    'is_primary_admin' => $u->id === $primaryAdminId,
+                    'last_seen_at' => $seen,
+                    'online_now' => $seen !== null && \Illuminate\Support\Carbon::parse($seen)->gt($onlineCutoff),
+                ];
+            });
 
         return response()->json($staff);
     }

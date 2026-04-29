@@ -164,6 +164,10 @@
                         <template x-for="u in staff" :key="u.id">
                             <tr class="border-t border-slate-100">
                                 <td class="px-3 py-2">
+                                    <span x-show="u.online_now" class="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1.5 align-middle"
+                                          :title="'Online · last seen ' + (u.last_seen_at || 'unknown')"></span>
+                                    <span x-show="!u.online_now" class="inline-block w-2 h-2 rounded-full bg-slate-300 mr-1.5 align-middle"
+                                          :title="u.last_seen_at ? ('Last seen ' + u.last_seen_at) : 'Never logged in'"></span>
                                     <span x-text="u.name"></span>
                                     <span x-show="u.is_primary_admin"
                                           class="ml-2 text-[10px] uppercase tracking-wide bg-amber-100 text-amber-800 rounded px-1.5 py-0.5">Owner</span>

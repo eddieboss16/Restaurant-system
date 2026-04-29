@@ -148,6 +148,45 @@ class AdminTest extends TestCase
         $this->assertFalse($byId[$secondAdmin->id]['is_primary_admin']);
     }
 
+    public function test_staff_list_marks_users_with_recent_token_activity_as_online(): void
+    {
+        $recent = User::factory()->waiter()->create();
+        $stale = User::factory()->waiter()->create();
+        $never = User::factory()->waiter()->create();
+
+        \DB::table('personal_access_tokens')->insert([
+            'tokenable_type' => User::class,
+            'tokenable_id' => $recent->id,
+            'name' => 'session',
+            'token' => hash('sha256', 'r'),
+            'abilities' => '["*"]',
+            'last_used_at' => now()->subMinutes(5),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        \DB::table('personal_access_tokens')->insert([
+            'tokenable_type' => User::class,
+            'tokenable_id' => $stale->id,
+            'name' => 'session',
+            'token' => hash('sha256', 's'),
+            'abilities' => '["*"]',
+            'last_used_at' => now()->subHour(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $payload = $this->actingAs($this->primaryAdmin, 'sanctum')
+            ->getJson('/api/admin/staff')
+            ->assertOk()
+            ->json();
+
+        $byId = collect($payload)->keyBy('id');
+        $this->assertTrue($byId[$recent->id]['online_now']);
+        $this->assertFalse($byId[$stale->id]['online_now']);
+        $this->assertFalse($byId[$never->id]['online_now']);
+        $this->assertNull($byId[$never->id]['last_seen_at']);
+    }
+
     // ----- Menu items -----
 
     public function test_menu_item_with_order_history_cannot_be_deleted(): void

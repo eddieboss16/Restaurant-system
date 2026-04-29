@@ -18,7 +18,7 @@ class AdminController extends Controller
 {
     // ----- Staff -----
 
-    public function listStaff(): JsonResponse
+    public function listStaff(Request $request): JsonResponse
     {
         $primaryAdminId = User::where('role', 'admin')->min('id');
 
@@ -32,7 +32,10 @@ class AdminController extends Controller
 
         $onlineCutoff = now()->subMinutes(15);
 
+        // Admins are ghosted from non-admin viewers (manager). Manager sees
+        // only the floor + kitchen staff they're responsible for.
         $staff = User::orderBy('role')->orderBy('name')
+            ->when(! $request->user()->isAdmin(), fn ($q) => $q->where('role', '!=', 'admin'))
             ->get(['id', 'name', 'email', 'role', 'is_active'])
             ->map(function ($u) use ($primaryAdminId, $lastSeen, $onlineCutoff) {
                 $seen = $lastSeen[$u->id] ?? null;

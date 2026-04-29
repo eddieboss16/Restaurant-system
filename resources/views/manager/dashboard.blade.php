@@ -151,6 +151,51 @@
             </template>
         </section>
 
+        <!-- Staff (read-only; admins hidden) -->
+        <section x-show="tab === 'staff'" x-cloak>
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="font-semibold text-slate-800">Staff</h2>
+                <span class="text-xs text-slate-500">read-only</span>
+            </div>
+            <div class="bg-white rounded shadow-sm border border-slate-200 overflow-hidden">
+                <table class="w-full text-sm">
+                    <thead class="bg-slate-50 text-xs text-slate-500 uppercase">
+                        <tr>
+                            <th class="px-3 py-2 text-left">Name</th>
+                            <th class="px-3 py-2 text-left">Email</th>
+                            <th class="px-3 py-2 text-left">Role</th>
+                            <th class="px-3 py-2 text-left">Active</th>
+                            <th class="px-3 py-2 text-left">Last seen</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="u in staff" :key="u.id">
+                            <tr class="border-t border-slate-100">
+                                <td class="px-3 py-2">
+                                    <span x-show="u.online_now" class="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1.5 align-middle"
+                                          :title="'Online · last seen ' + (u.last_seen_at || 'unknown')"></span>
+                                    <span x-show="!u.online_now" class="inline-block w-2 h-2 rounded-full bg-slate-300 mr-1.5 align-middle"
+                                          :title="u.last_seen_at ? ('Last seen ' + u.last_seen_at) : 'Never logged in'"></span>
+                                    <span x-text="u.name"></span>
+                                </td>
+                                <td class="px-3 py-2 text-slate-600" x-text="u.email"></td>
+                                <td class="px-3 py-2 text-xs uppercase tracking-wide text-slate-700" x-text="u.role"></td>
+                                <td class="px-3 py-2">
+                                    <span :class="u.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'"
+                                          class="text-xs rounded px-2 py-0.5"
+                                          x-text="u.is_active ? 'active' : 'disabled'"></span>
+                                </td>
+                                <td class="px-3 py-2 text-xs text-slate-500" x-text="u.last_seen_at || 'never'"></td>
+                            </tr>
+                        </template>
+                        <template x-if="staff.length === 0">
+                            <tr><td colspan="5" class="px-3 py-4 text-center text-xs text-slate-400 italic">No staff loaded.</td></tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
         <!-- Paid sessions -->
         <section x-show="tab === 'paid'" x-cloak>
             <div class="flex items-center justify-between mb-3">
@@ -372,6 +417,7 @@
                     { key: 'paid',         label: 'Paid sessions' },
                     { key: 'menu',         label: 'Menu' },
                     { key: 'inventory',    label: 'Inventory' },
+                    { key: 'staff',        label: 'Staff' },
                 ],
                 tab: 'reports',
                 error: '',
@@ -383,6 +429,7 @@
                 categories: ['supplies', 'salaries', 'utilities', 'rent', 'transport', 'other'],
 
                 paidSessions: [],
+                staff: [],
 
                 menuItems: [],
                 resources: [],
@@ -415,6 +462,13 @@
                     if (key === 'menu') await this.loadMenuItems();
                     if (key === 'inventory') await this.loadResources();
                     if (key === 'paid') await this.loadPaidSessions();
+                    if (key === 'staff') await this.loadStaff();
+                },
+
+                async loadStaff() {
+                    try {
+                        this.staff = await api('/admin/staff');
+                    } catch (e) { this.error = e.message; }
                 },
 
                 async loadPaidSessions() {

@@ -86,11 +86,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/resources/{resource}/restock', [AdminController::class, 'restockResource']);
 
         Route::get('/cancellations', [AdminController::class, 'listCancellations']);
+
+        // Read-only staff list. Admins are filtered out for non-admin viewers
+        // inside listStaff -- manager sees floor + kitchen, never admins.
+        Route::get('/staff', [AdminController::class, 'listStaff']);
     });
 
     // Strictly admin: hiring/firing/role changes.
     Route::middleware('role:admin')->prefix('admin')->group(function () {
-        Route::get('/staff', [AdminController::class, 'listStaff']);
         Route::post('/staff', [AdminController::class, 'createStaff']);
         Route::patch('/staff/{user}', [AdminController::class, 'updateStaff']);
     });

@@ -277,17 +277,54 @@ class AdminTest extends TestCase
 
     // ----- Role gating -----
 
-    public function test_only_admin_can_reach_staff_endpoints(): void
+    public function test_only_admin_can_create_or_update_staff(): void
     {
-        foreach ([
-            User::factory()->waiter()->create(),
-            User::factory()->kitchen()->create(),
-            User::factory()->manager()->create(),
-        ] as $user) {
-            $this->actingAs($user, 'sanctum')
-                ->getJson('/api/admin/staff')
-                ->assertForbidden();
-        }
+        $waiter = User::factory()->waiter()->create();
+        $manager = User::factory()->manager()->create();
+
+        $this->actingAs($waiter, 'sanctum')
+            ->postJson('/api/admin/staff', [
+                'name' => 'X', 'email' => 'x@test.local', 'password' => 'password123', 'role' => 'waiter',
+            ])->assertForbidden();
+
+        $this->actingAs($manager, 'sanctum')
+            ->postJson('/api/admin/staff', [
+                'name' => 'X', 'email' => 'x@test.local', 'password' => 'password123', 'role' => 'waiter',
+            ])->assertForbidden();
+    }
+
+    public function test_manager_sees_staff_list_with_admins_ghosted(): void
+    {
+        $manager = User::factory()->manager()->create();
+        $waiter = User::factory()->waiter()->create(['name' => 'Floor Waiter']);
+        $kitchen = User::factory()->kitchen()->create(['name' => 'Kitchen Hand']);
+        $secondAdmin = User::factory()->admin()->create(['name' => 'Other Admin']);
+
+        $payload = $this->actingAs($manager, 'sanctum')
+            ->getJson('/api/admin/staff')
+            ->assertOk()
+            ->json();
+
+        $names = array_column($payload, 'name');
+        $this->assertContains('Floor Waiter', $names);
+        $this->assertContains('Kitchen Hand', $names);
+        $this->assertContains($manager->name, $names);
+        $this->assertNotContains('Other Admin', $names);
+        $this->assertNotContains('Owner', $names); // primaryAdmin from setUp
+    }
+
+    public function test_admin_sees_every_staff_member_including_other_admins(): void
+    {
+        $secondAdmin = User::factory()->admin()->create(['name' => 'Other Admin']);
+
+        $payload = $this->actingAs($this->primaryAdmin, 'sanctum')
+            ->getJson('/api/admin/staff')
+            ->assertOk()
+            ->json();
+
+        $names = array_column($payload, 'name');
+        $this->assertContains('Owner', $names);
+        $this->assertContains('Other Admin', $names);
     }
 
     public function test_manager_can_reach_menu_inventory_and_cancellations(): void

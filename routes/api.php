@@ -6,6 +6,7 @@ use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\MpesaController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\PrintJobController;
 use App\Http\Controllers\SessionController;
 use App\Models\MenuItem;
 use App\Services\ReportService;
@@ -16,6 +17,14 @@ Route::post('/login', [AuthController::class, 'login']);
 
 // Daraja STK push callback. Public, no auth -- Safaricom calls this directly.
 Route::post('/mpesa/callback', [MpesaController::class, 'callback']);
+
+// Print bridge endpoints. Auth via shared X-Bridge-Token header (NOT Sanctum) --
+// this is a service-to-service channel, not a user session.
+Route::middleware('bridge.token')->prefix('print-jobs')->group(function () {
+    Route::get('/pending', [PrintJobController::class, 'pending']);
+    Route::post('/{printJob}/ack', [PrintJobController::class, 'ack']);
+    Route::post('/{printJob}/fail', [PrintJobController::class, 'fail']);
+});
 
 Route::middleware('auth:sanctum')->group(function () {
 
@@ -40,6 +49,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/sessions/{session}/orders', [OrderController::class, 'store']);
         Route::post('/sessions/{session}/payment', [PaymentController::class, 'store']);
         Route::post('/sessions/{session}/payment/stk', [PaymentController::class, 'initiateStk']);
+        Route::post('/sessions/{session}/receipt', [PrintJobController::class, 'queue']);
 
         Route::delete('/orders/{order}', [OrderController::class, 'cancel']);
     });

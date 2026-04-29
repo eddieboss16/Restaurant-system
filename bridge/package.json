@@ -1,0 +1,15 @@
+{
+  "name": "restaurant-print-bridge",
+  "version": "0.1.0",
+  "description": "Node.js bridge that forwards Laravel-queued print jobs to a thermal ESC/POS printer.",
+  "main": "print-bridge.js",
+  "scripts": {
+    "start": "node print-bridge.js"
+  },
+  "dependencies": {
+    "node-thermal-printer": "^4.4.4"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

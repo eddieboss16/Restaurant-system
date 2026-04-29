@@ -76,6 +76,10 @@
                                     <span class="text-emerald-600 uppercase tracking-wide" x-text="s.method"></span>
                                     <span x-show="s.mpesa_code" class="text-slate-400 ml-1" x-text="'· ' + s.mpesa_code"></span>
                                 </div>
+                                <button @click="printReceipt(s.id)"
+                                        class="text-xs text-slate-500 hover:text-slate-800 underline mt-1">
+                                    Print receipt
+                                </button>
                             </div>
                         </div>
                     </template>
@@ -382,6 +386,15 @@
                         this.myToday = await api('/me/today');
                     } catch (e) {
                         // not fatal -- the strip will just show dashes.
+                    }
+                },
+
+                async printReceipt(sessionId) {
+                    try {
+                        await api('/sessions/' + sessionId + '/receipt', { method: 'POST' });
+                        alert('Receipt queued. The printer will pick it up shortly.');
+                    } catch (e) {
+                        alert('Could not queue receipt: ' + e.message);
                     }
                 },
 

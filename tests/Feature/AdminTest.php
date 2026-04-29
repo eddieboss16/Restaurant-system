@@ -278,7 +278,7 @@ class AdminTest extends TestCase
 
     // ----- Role gating -----
 
-    public function test_non_admin_roles_cannot_reach_admin_endpoints(): void
+    public function test_only_admin_can_reach_staff_endpoints(): void
     {
         foreach ([
             User::factory()->waiter()->create(),
@@ -288,6 +288,49 @@ class AdminTest extends TestCase
             $this->actingAs($user, 'sanctum')
                 ->getJson('/api/admin/staff')
                 ->assertForbidden();
+        }
+    }
+
+    public function test_manager_can_reach_menu_inventory_and_cancellations(): void
+    {
+        $manager = User::factory()->manager()->create();
+
+        $this->actingAs($manager, 'sanctum')->getJson('/api/admin/menu-items')->assertOk();
+        $this->actingAs($manager, 'sanctum')->getJson('/api/admin/resources')->assertOk();
+        $this->actingAs($manager, 'sanctum')->getJson('/api/admin/cancellations')->assertOk();
+    }
+
+    public function test_manager_can_create_a_menu_item_and_restock_a_resource(): void
+    {
+        $manager = User::factory()->manager()->create();
+
+        $this->actingAs($manager, 'sanctum')
+            ->postJson('/api/admin/menu-items', [
+                'name' => 'Mandazi',
+                'price' => 20.00,
+                'category' => 'food',
+            ])->assertCreated();
+
+        $this->actingAs($manager, 'sanctum')
+            ->postJson('/api/admin/resources/' . $this->resources['potatoes']->id . '/restock', [
+                'amount' => 1000,
+                'reason' => 'manager-led restock',
+            ])->assertOk();
+
+        $this->assertDatabaseHas('menu_items', ['name' => 'Mandazi']);
+        $this->assertDatabaseHas('resource_transactions', [
+            'resource_id' => $this->resources['potatoes']->id,
+            'change_amount' => 1000.000,
+            'type' => 'manual_restock',
+            'triggered_by' => $manager->id,
+        ]);
+    }
+
+    public function test_waiter_and_kitchen_cannot_reach_menu_or_resource_management(): void
+    {
+        foreach ([User::factory()->waiter()->create(), User::factory()->kitchen()->create()] as $user) {
+            $this->actingAs($user, 'sanctum')->getJson('/api/admin/menu-items')->assertForbidden();
+            $this->actingAs($user, 'sanctum')->getJson('/api/admin/resources')->assertForbidden();
         }
     }
 }

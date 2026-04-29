@@ -70,11 +70,10 @@ Route::middleware('auth:sanctum')->group(function () {
             ->get(['id', 'name', 'unit', 'current_stock', 'low_stock_threshold']));
     });
 
-    Route::middleware('role:admin')->prefix('admin')->group(function () {
-        Route::get('/staff', [AdminController::class, 'listStaff']);
-        Route::post('/staff', [AdminController::class, 'createStaff']);
-        Route::patch('/staff/{user}', [AdminController::class, 'updateStaff']);
-
+    // Menu + inventory CRUD + cancellation log: manager-and-up. Path keeps
+    // the /admin prefix because it's how the existing admin dashboard already
+    // calls it -- "admin" here is a path namespace, not an access claim.
+    Route::middleware('role:manager')->prefix('admin')->group(function () {
         Route::get('/menu-items', [AdminController::class, 'listMenuItems']);
         Route::post('/menu-items', [AdminController::class, 'createMenuItem']);
         Route::patch('/menu-items/{menuItem}', [AdminController::class, 'updateMenuItem']);
@@ -85,5 +84,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/resources/{resource}/restock', [AdminController::class, 'restockResource']);
 
         Route::get('/cancellations', [AdminController::class, 'listCancellations']);
+    });
+
+    // Strictly admin: hiring/firing/role changes.
+    Route::middleware('role:admin')->prefix('admin')->group(function () {
+        Route::get('/staff', [AdminController::class, 'listStaff']);
+        Route::post('/staff', [AdminController::class, 'createStaff']);
+        Route::patch('/staff/{user}', [AdminController::class, 'updateStaff']);
     });
 });

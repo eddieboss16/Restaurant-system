@@ -151,6 +151,85 @@
             </template>
         </section>
 
+        <!-- Menu -->
+        <section x-show="tab === 'menu'" x-cloak>
+            <div class="flex justify-between items-center mb-3">
+                <h2 class="font-semibold text-slate-800">Menu items</h2>
+                <button @click="newItemOpen = true" class="text-sm bg-slate-800 text-white rounded px-3 py-1.5">+ Add item</button>
+            </div>
+            <div class="bg-white rounded shadow-sm border border-slate-200 overflow-hidden">
+                <table class="w-full text-sm">
+                    <thead class="bg-slate-50 text-xs text-slate-500 uppercase">
+                        <tr>
+                            <th class="px-3 py-2 text-left">Name</th>
+                            <th class="px-3 py-2 text-left">Category</th>
+                            <th class="px-3 py-2 text-left">Price (KES)</th>
+                            <th class="px-3 py-2 text-left">Available</th>
+                            <th class="px-3 py-2"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="m in menuItems" :key="m.id">
+                            <tr class="border-t border-slate-100">
+                                <td class="px-3 py-2" x-text="m.name"></td>
+                                <td class="px-3 py-2 text-slate-500" x-text="m.category || '—'"></td>
+                                <td class="px-3 py-2">
+                                    <input type="number" step="0.01" :value="m.price"
+                                           @change="updateMenuItem(m, { price: parseFloat($event.target.value) })"
+                                           class="w-24 text-sm rounded border border-slate-300 px-2 py-0.5">
+                                </td>
+                                <td class="px-3 py-2">
+                                    <button @click="updateMenuItem(m, { is_available: !m.is_available })"
+                                            :class="m.is_available ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'"
+                                            class="text-xs rounded px-2 py-0.5"
+                                            x-text="m.is_available ? 'on menu' : 'hidden'"></button>
+                                </td>
+                                <td class="px-3 py-2 text-right">
+                                    <button @click="deleteMenuItem(m)" class="text-xs text-red-600 hover:underline">Delete</button>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Inventory -->
+        <section x-show="tab === 'inventory'" x-cloak>
+            <h2 class="font-semibold text-slate-800 mb-3">Inventory</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <template x-for="r in resources" :key="r.id">
+                    <div class="bg-white rounded shadow-sm border border-slate-200 p-3"
+                         :class="r.low_stock ? 'border-red-300 ring-1 ring-red-100' : ''">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <div class="font-medium text-slate-800" x-text="r.name"></div>
+                                <div class="text-xs text-slate-500" x-text="'Last restocked: ' + (r.last_restocked_at ? new Date(r.last_restocked_at).toLocaleString() : 'never')"></div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-lg font-semibold" x-text="Number(r.current_stock).toFixed(0) + ' ' + r.unit"></div>
+                                <div class="text-xs" :class="r.low_stock ? 'text-red-600' : 'text-slate-500'"
+                                     x-text="'threshold: ' + Number(r.low_stock_threshold).toFixed(0)"></div>
+                            </div>
+                        </div>
+                        <div class="flex gap-2 items-center mt-3">
+                            <input type="number" step="any" min="0.001" placeholder="amount" x-model.number="restockAmounts[r.id]"
+                                   class="w-24 text-sm rounded border border-slate-300 px-2 py-1">
+                            <input type="text" placeholder="reason (optional)" x-model="restockReasons[r.id]"
+                                   class="flex-1 text-sm rounded border border-slate-300 px-2 py-1">
+                            <button @click="restock(r)" class="text-xs bg-emerald-600 text-white rounded px-3 py-1.5">Restock</button>
+                        </div>
+                        <div class="flex gap-2 items-center mt-2">
+                            <label class="text-xs text-slate-500">Threshold:</label>
+                            <input type="number" step="any" min="0" :value="r.low_stock_threshold"
+                                   @change="updateResource(r, { low_stock_threshold: parseFloat($event.target.value) })"
+                                   class="w-24 text-sm rounded border border-slate-300 px-2 py-1">
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </section>
+
         <!-- Expenses -->
         <section x-show="tab === 'expenses'" x-cloak>
             <div class="flex justify-between items-center mb-3">
@@ -185,6 +264,22 @@
                 </table>
             </div>
         </section>
+
+        <!-- New menu item modal -->
+        <div x-show="newItemOpen" x-cloak class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+            <div class="bg-white rounded-lg shadow-lg w-full max-w-sm p-5">
+                <h3 class="font-semibold text-slate-800 mb-3">Add menu item</h3>
+                <div class="space-y-2">
+                    <input x-model="newItem.name" placeholder="Name" class="w-full rounded border border-slate-300 px-3 py-2 text-sm">
+                    <input x-model.number="newItem.price" type="number" step="0.01" placeholder="Price (KES)" class="w-full rounded border border-slate-300 px-3 py-2 text-sm">
+                    <input x-model="newItem.category" placeholder="Category (food, drinks, …)" class="w-full rounded border border-slate-300 px-3 py-2 text-sm">
+                </div>
+                <div class="flex justify-end gap-2 mt-4">
+                    <button @click="newItemOpen = false" class="text-sm text-slate-600 px-3 py-2">Cancel</button>
+                    <button @click="createMenuItem()" class="text-sm bg-slate-800 text-white rounded px-4 py-2">Create</button>
+                </div>
+            </div>
+        </div>
 
         <!-- New expense modal -->
         <div x-show="newExpenseOpen" x-cloak class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
@@ -232,8 +327,10 @@
         function managerDashboard() {
             return {
                 tabs: [
-                    { key: 'reports',  label: 'Reports' },
-                    { key: 'expenses', label: 'Expenses' },
+                    { key: 'reports',   label: 'Reports' },
+                    { key: 'expenses',  label: 'Expenses' },
+                    { key: 'menu',      label: 'Menu' },
+                    { key: 'inventory', label: 'Inventory' },
                 ],
                 tab: 'reports',
                 error: '',
@@ -243,6 +340,14 @@
 
                 expenses: [],
                 categories: ['supplies', 'salaries', 'utilities', 'rent', 'transport', 'other'],
+
+                menuItems: [],
+                resources: [],
+                restockAmounts: {},
+                restockReasons: {},
+
+                newItemOpen: false,
+                newItem: { name: '', price: 0, category: '' },
 
                 lowStock: [],
 
@@ -264,6 +369,68 @@
                     this.tab = key;
                     if (key === 'expenses') await this.loadExpenses();
                     if (key === 'reports' && !this.report) await this.loadReport();
+                    if (key === 'menu') await this.loadMenuItems();
+                    if (key === 'inventory') await this.loadResources();
+                },
+
+                async loadMenuItems() {
+                    try {
+                        this.menuItems = await api('/admin/menu-items');
+                    } catch (e) { this.error = e.message; }
+                },
+
+                async loadResources() {
+                    try {
+                        this.resources = await api('/admin/resources');
+                    } catch (e) { this.error = e.message; }
+                },
+
+                async createMenuItem() {
+                    try {
+                        await api('/admin/menu-items', { method: 'POST', body: JSON.stringify(this.newItem) });
+                        this.newItemOpen = false;
+                        this.newItem = { name: '', price: 0, category: '' };
+                        await this.loadMenuItems();
+                    } catch (e) { this.error = e.message; }
+                },
+
+                async updateMenuItem(item, patch) {
+                    try {
+                        await api('/admin/menu-items/' + item.id, { method: 'PATCH', body: JSON.stringify(patch) });
+                        await this.loadMenuItems();
+                    } catch (e) { this.error = e.message; }
+                },
+
+                async deleteMenuItem(item) {
+                    if (!confirm('Delete ' + item.name + '?')) return;
+                    try {
+                        await api('/admin/menu-items/' + item.id, { method: 'DELETE' });
+                        await this.loadMenuItems();
+                    } catch (e) { this.error = e.message; }
+                },
+
+                async updateResource(resource, patch) {
+                    try {
+                        await api('/admin/resources/' + resource.id, { method: 'PATCH', body: JSON.stringify(patch) });
+                        await this.loadResources();
+                    } catch (e) { this.error = e.message; }
+                },
+
+                async restock(resource) {
+                    const amount = this.restockAmounts[resource.id];
+                    if (!amount || amount <= 0) {
+                        this.error = 'Enter a restock amount.';
+                        return;
+                    }
+                    try {
+                        await api('/admin/resources/' + resource.id + '/restock', {
+                            method: 'POST',
+                            body: JSON.stringify({ amount, reason: this.restockReasons[resource.id] || null }),
+                        });
+                        this.restockAmounts[resource.id] = null;
+                        this.restockReasons[resource.id] = '';
+                        await Promise.all([this.loadResources(), this.loadLowStock()]);
+                    } catch (e) { this.error = e.message; }
                 },
 
                 async loadReport() {

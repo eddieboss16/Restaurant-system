@@ -33,7 +33,7 @@ class AdminController extends Controller
         $onlineCutoff = now()->subMinutes(15);
 
         $staff = User::orderBy('role')->orderBy('name')
-            ->get(['id', 'name', 'email', 'role', 'is_active', 'pin'])
+            ->get(['id', 'name', 'email', 'role', 'is_active'])
             ->map(function ($u) use ($primaryAdminId, $lastSeen, $onlineCutoff) {
                 $seen = $lastSeen[$u->id] ?? null;
                 return $u->toArray() + [
@@ -53,7 +53,6 @@ class AdminController extends Controller
             'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:8',
             'role' => ['required', Rule::in(['waiter', 'kitchen', 'manager', 'admin'])],
-            'pin' => 'nullable|string|size:4',
         ]);
 
         $user = User::create([
@@ -61,7 +60,6 @@ class AdminController extends Controller
             'email' => $data['email'],
             'password' => Hash::make($data['password']),
             'role' => $data['role'],
-            'pin' => $data['pin'] ?? null,
             'is_active' => true,
         ]);
 
@@ -73,7 +71,6 @@ class AdminController extends Controller
         $data = $request->validate([
             'name' => 'sometimes|string|max:100',
             'role' => ['sometimes', Rule::in(['waiter', 'kitchen', 'manager', 'admin'])],
-            'pin' => 'nullable|string|size:4',
             'is_active' => 'sometimes|boolean',
             'password' => 'nullable|string|min:8',
         ]);

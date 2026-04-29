@@ -155,7 +155,6 @@
                             <th class="px-3 py-2 text-left">Name</th>
                             <th class="px-3 py-2 text-left">Email</th>
                             <th class="px-3 py-2 text-left">Role</th>
-                            <th class="px-3 py-2 text-left">PIN</th>
                             <th class="px-3 py-2 text-left">Active</th>
                             <th class="px-3 py-2"></th>
                         </tr>
@@ -184,7 +183,6 @@
                                         <option value="admin">admin</option>
                                     </select>
                                 </td>
-                                <td class="px-3 py-2 text-slate-500" x-text="u.pin || '—'"></td>
                                 <td class="px-3 py-2">
                                     <button @click="updateStaff(u, { is_active: !u.is_active })"
                                             :disabled="lockedFor(u)"
@@ -367,7 +365,6 @@
                         <option value="manager">manager</option>
                         <option value="admin">admin</option>
                     </select>
-                    <input x-model="newStaff.pin" placeholder="PIN (4 digits, optional)" maxlength="4" class="w-full rounded border border-slate-300 px-3 py-2 text-sm">
                 </div>
                 <div class="flex justify-end gap-2 mt-4">
                     <button @click="newStaffOpen = false" class="text-sm text-slate-600 px-3 py-2">Cancel</button>
@@ -453,7 +450,7 @@
                 restockReasons: {},
 
                 newStaffOpen: false,
-                newStaff: { name: '', email: '', password: '', role: 'waiter', pin: '' },
+                newStaff: { name: '', email: '', password: '', role: 'waiter' },
 
                 newItemOpen: false,
                 newItem: { name: '', price: 0, category: '' },
@@ -546,7 +543,7 @@
                     try {
                         await api('/admin/staff', { method: 'POST', body: JSON.stringify(this.newStaff) });
                         this.newStaffOpen = false;
-                        this.newStaff = { name: '', email: '', password: '', role: 'waiter', pin: '' };
+                        this.newStaff = { name: '', email: '', password: '', role: 'waiter' };
                         await this.loadAll();
                     } catch (e) { this.error = e.message; }
                 },

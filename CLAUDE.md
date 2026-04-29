@@ -86,6 +86,4 @@ php artisan schedule:work        # local scheduler -- needed for stuck-STK clean
 - No receipt printing (Bluetooth ESC/POS would close this).
 - No daily WhatsApp/SMS summary to the owner.
 - No paid-session history view (sessions disappear once `paid`).
-- No "online now" presence indicator on Staff list.
-- `users.pin` column is seeded for waiters but unused — either build a shift-switcher or drop it.
 - Single-tenant only — no `restaurant_id` scoping on models.

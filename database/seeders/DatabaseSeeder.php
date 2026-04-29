@@ -35,9 +35,9 @@ class DatabaseSeeder extends Seeder
         );
 
         foreach ([
-            ['name' => 'Amina Waiter',  'email' => 'amina@restaurant.co.ke',  'pin' => '1111'],
-            ['name' => 'Brian Waiter',  'email' => 'brian@restaurant.co.ke',  'pin' => '2222'],
-            ['name' => 'Cynthia Waiter','email' => 'cynthia@restaurant.co.ke','pin' => '3333'],
+            ['name' => 'Amina Waiter',   'email' => 'amina@restaurant.co.ke'],
+            ['name' => 'Brian Waiter',   'email' => 'brian@restaurant.co.ke'],
+            ['name' => 'Cynthia Waiter', 'email' => 'cynthia@restaurant.co.ke'],
         ] as $waiter) {
             User::updateOrCreate(
                 ['email' => $waiter['email']],
@@ -45,7 +45,6 @@ class DatabaseSeeder extends Seeder
                     'name' => $waiter['name'],
                     'password' => Hash::make('password'),
                     'role' => 'waiter',
-                    'pin' => $waiter['pin'],
                     'is_active' => true,
                 ],
             );

@@ -35,7 +35,6 @@ class AdminTest extends TestCase
                 'email' => 'hire@test.local',
                 'password' => 'password123',
                 'role' => 'waiter',
-                'pin' => '4242',
             ])->assertCreated();
 
         $this->assertDatabaseHas('users', [

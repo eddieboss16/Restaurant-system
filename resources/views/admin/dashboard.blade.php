@@ -283,6 +283,46 @@
             </div>
         </section>
 
+        <!-- Paid sessions -->
+        <section x-show="tab === 'paid'" x-cloak>
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="font-semibold text-slate-800">Paid sessions</h2>
+                <span class="text-xs text-slate-500">latest 100</span>
+            </div>
+            <div class="bg-white rounded shadow-sm border border-slate-200 overflow-hidden">
+                <table class="w-full text-sm">
+                    <thead class="bg-slate-50 text-xs text-slate-500 uppercase">
+                        <tr>
+                            <th class="px-3 py-2 text-left">Closed</th>
+                            <th class="px-3 py-2 text-left">Customer</th>
+                            <th class="px-3 py-2 text-left">Waiter</th>
+                            <th class="px-3 py-2 text-left">Items</th>
+                            <th class="px-3 py-2 text-right">Total</th>
+                            <th class="px-3 py-2 text-left">Method</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="s in paidSessions" :key="s.id">
+                            <tr class="border-t border-slate-100">
+                                <td class="px-3 py-2 text-slate-600 text-xs whitespace-nowrap" x-text="s.closed_at ? new Date(s.closed_at).toLocaleString() : ''"></td>
+                                <td class="px-3 py-2" x-text="s.customer_label || 'unlabeled'"></td>
+                                <td class="px-3 py-2 text-slate-600" x-text="s.waiter?.name || '?'"></td>
+                                <td class="px-3 py-2 text-xs text-slate-500" x-text="sessionItemsLine(s)"></td>
+                                <td class="px-3 py-2 text-right font-medium" x-text="'KES ' + formatKes(sessionTotal(s))"></td>
+                                <td class="px-3 py-2 text-xs">
+                                    <span class="uppercase tracking-wide text-emerald-700" x-text="s.payment?.method || ''"></span>
+                                    <span x-show="s.payment?.mpesa_code" class="text-slate-400 ml-1" x-text="s.payment?.mpesa_code"></span>
+                                </td>
+                            </tr>
+                        </template>
+                        <template x-if="paidSessions.length === 0">
+                            <tr><td colspan="6" class="px-3 py-4 text-center text-xs text-slate-400 italic">No paid sessions yet.</td></tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
         <!-- Cancellations -->
         <section x-show="tab === 'cancellations'" x-cloak>
             <h2 class="font-semibold text-slate-800 mb-3">Recent cancellations</h2>
@@ -391,6 +431,7 @@
             return {
                 tabs: [
                     { key: 'reports',       label: 'Reports' },
+                    { key: 'paid',          label: 'Paid sessions' },
                     { key: 'staff',         label: 'Staff' },
                     { key: 'menu',          label: 'Menu' },
                     { key: 'resources',     label: 'Inventory' },
@@ -403,6 +444,7 @@
                 menuItems: [],
                 resources: [],
                 cancellations: [],
+                paidSessions: [],
                 report: null,
                 reportPeriod: 'day',
                 lowStock: [],
@@ -429,13 +471,14 @@
 
                 async loadAll() {
                     try {
-                        const [staff, menu, res, canc, report, lowStock] = await Promise.all([
+                        const [staff, menu, res, canc, report, lowStock, paid] = await Promise.all([
                             api('/admin/staff'),
                             api('/admin/menu-items'),
                             api('/admin/resources'),
                             api('/admin/cancellations'),
                             api('/reports/' + (this.reportPeriod === 'day' ? 'today' : 'month')),
                             api('/inventory/low-stock'),
+                            api('/paid-sessions'),
                         ]);
                         this.staff = staff;
                         this.menuItems = menu;
@@ -443,9 +486,23 @@
                         this.cancellations = canc;
                         this.report = report;
                         this.lowStock = lowStock;
+                        this.paidSessions = paid;
                     } catch (e) {
                         this.error = e.message;
                     }
+                },
+
+                sessionItemsLine(s) {
+                    return (s.orders || [])
+                        .filter(o => o.status !== 'cancelled')
+                        .map(o => o.quantity + '× ' + (o.menu_item?.name || ''))
+                        .join(', ');
+                },
+
+                sessionTotal(s) {
+                    return (s.orders || [])
+                        .filter(o => o.status !== 'cancelled')
+                        .reduce((sum, o) => sum + Number(o.quantity) * Number(o.unit_price), 0);
                 },
 
                 async setReportPeriod(period) {

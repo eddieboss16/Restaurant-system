@@ -186,6 +186,60 @@ class OrderFlowTest extends TestCase
             ->assertStatus(422);
     }
 
+    public function test_paid_sessions_history_returns_only_paid_sessions_for_manager(): void
+    {
+        $waiter = User::factory()->waiter()->create();
+        $manager = User::factory()->manager()->create();
+
+        $paid = CustomerSession::create([
+            'waiter_id' => $waiter->id,
+            'customer_label' => 'lady in red',
+            'status' => 'paid',
+            'opened_at' => now()->subHour(),
+            'closed_at' => now()->subMinutes(5),
+        ]);
+        \App\Models\Payment::create([
+            'session_id' => $paid->id,
+            'method' => 'cash',
+            'amount' => 80,
+            'status' => 'completed',
+            'collected_by' => $waiter->id,
+            'confirmed_at' => now()->subMinutes(5),
+        ]);
+        Order::create([
+            'session_id' => $paid->id,
+            'menu_item_id' => $this->menuItems['soda']->id,
+            'quantity' => 1,
+            'unit_price' => 80,
+            'status' => 'delivered',
+        ]);
+
+        // An open session that should NOT appear.
+        CustomerSession::create([
+            'waiter_id' => $waiter->id,
+            'status' => 'open',
+            'opened_at' => now(),
+        ]);
+
+        $payload = $this->actingAs($manager, 'sanctum')
+            ->getJson('/api/paid-sessions')
+            ->assertOk()
+            ->json();
+
+        $this->assertCount(1, $payload);
+        $this->assertSame($paid->id, $payload[0]['id']);
+        $this->assertSame('lady in red', $payload[0]['customer_label']);
+        $this->assertSame('cash', $payload[0]['payment']['method']);
+    }
+
+    public function test_paid_sessions_blocked_for_waiter_and_kitchen(): void
+    {
+        $this->actingAs(User::factory()->waiter()->create(), 'sanctum')
+            ->getJson('/api/paid-sessions')->assertForbidden();
+        $this->actingAs(User::factory()->kitchen()->create(), 'sanctum')
+            ->getJson('/api/paid-sessions')->assertForbidden();
+    }
+
     public function test_kitchen_history_returns_recent_delivered_orders_only(): void
     {
         $waiter = User::factory()->waiter()->create();

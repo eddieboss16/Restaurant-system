@@ -47,4 +47,21 @@ class SessionController extends Controller
             $session->load(['orders.menuItem', 'payment', 'waiter:id,name'])
         );
     }
+
+    public function paidHistory(Request $request): JsonResponse
+    {
+        $query = CustomerSession::query()
+            ->with(['waiter:id,name', 'payment', 'orders.menuItem:id,name'])
+            ->where('status', 'paid')
+            ->latest('closed_at');
+
+        if ($from = $request->query('from')) {
+            $query->whereDate('closed_at', '>=', $from);
+        }
+        if ($to = $request->query('to')) {
+            $query->whereDate('closed_at', '<=', $to);
+        }
+
+        return response()->json($query->limit(100)->get());
+    }
 }

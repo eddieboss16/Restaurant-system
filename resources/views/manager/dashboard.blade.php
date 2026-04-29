@@ -151,6 +151,46 @@
             </template>
         </section>
 
+        <!-- Paid sessions -->
+        <section x-show="tab === 'paid'" x-cloak>
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="font-semibold text-slate-800">Paid sessions</h2>
+                <span class="text-xs text-slate-500">latest 100</span>
+            </div>
+            <div class="bg-white rounded shadow-sm border border-slate-200 overflow-hidden">
+                <table class="w-full text-sm">
+                    <thead class="bg-slate-50 text-xs text-slate-500 uppercase">
+                        <tr>
+                            <th class="px-3 py-2 text-left">Closed</th>
+                            <th class="px-3 py-2 text-left">Customer</th>
+                            <th class="px-3 py-2 text-left">Waiter</th>
+                            <th class="px-3 py-2 text-left">Items</th>
+                            <th class="px-3 py-2 text-right">Total</th>
+                            <th class="px-3 py-2 text-left">Method</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="s in paidSessions" :key="s.id">
+                            <tr class="border-t border-slate-100">
+                                <td class="px-3 py-2 text-slate-600 text-xs whitespace-nowrap" x-text="s.closed_at ? new Date(s.closed_at).toLocaleString() : ''"></td>
+                                <td class="px-3 py-2" x-text="s.customer_label || 'unlabeled'"></td>
+                                <td class="px-3 py-2 text-slate-600" x-text="s.waiter?.name || '?'"></td>
+                                <td class="px-3 py-2 text-xs text-slate-500" x-text="sessionItemsLine(s)"></td>
+                                <td class="px-3 py-2 text-right font-medium" x-text="'KES ' + formatKes(sessionTotal(s))"></td>
+                                <td class="px-3 py-2 text-xs">
+                                    <span class="uppercase tracking-wide text-emerald-700" x-text="s.payment?.method || ''"></span>
+                                    <span x-show="s.payment?.mpesa_code" class="text-slate-400 ml-1" x-text="s.payment?.mpesa_code"></span>
+                                </td>
+                            </tr>
+                        </template>
+                        <template x-if="paidSessions.length === 0">
+                            <tr><td colspan="6" class="px-3 py-4 text-center text-xs text-slate-400 italic">No paid sessions yet.</td></tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
         <!-- Menu -->
         <section x-show="tab === 'menu'" x-cloak>
             <div class="flex justify-between items-center mb-3">
@@ -327,10 +367,11 @@
         function managerDashboard() {
             return {
                 tabs: [
-                    { key: 'reports',   label: 'Reports' },
-                    { key: 'expenses',  label: 'Expenses' },
-                    { key: 'menu',      label: 'Menu' },
-                    { key: 'inventory', label: 'Inventory' },
+                    { key: 'reports',      label: 'Reports' },
+                    { key: 'expenses',     label: 'Expenses' },
+                    { key: 'paid',         label: 'Paid sessions' },
+                    { key: 'menu',         label: 'Menu' },
+                    { key: 'inventory',    label: 'Inventory' },
                 ],
                 tab: 'reports',
                 error: '',
@@ -340,6 +381,8 @@
 
                 expenses: [],
                 categories: ['supplies', 'salaries', 'utilities', 'rent', 'transport', 'other'],
+
+                paidSessions: [],
 
                 menuItems: [],
                 resources: [],
@@ -371,6 +414,26 @@
                     if (key === 'reports' && !this.report) await this.loadReport();
                     if (key === 'menu') await this.loadMenuItems();
                     if (key === 'inventory') await this.loadResources();
+                    if (key === 'paid') await this.loadPaidSessions();
+                },
+
+                async loadPaidSessions() {
+                    try {
+                        this.paidSessions = await api('/paid-sessions');
+                    } catch (e) { this.error = e.message; }
+                },
+
+                sessionItemsLine(s) {
+                    return (s.orders || [])
+                        .filter(o => o.status !== 'cancelled')
+                        .map(o => o.quantity + '× ' + (o.menu_item?.name || ''))
+                        .join(', ');
+                },
+
+                sessionTotal(s) {
+                    return (s.orders || [])
+                        .filter(o => o.status !== 'cancelled')
+                        .reduce((sum, o) => sum + Number(o.quantity) * Number(o.unit_price), 0);
                 },
 
                 async loadMenuItems() {

@@ -68,6 +68,8 @@ Route::middleware('auth:sanctum')->group(function () {
             ->whereColumn('current_stock', '<=', 'low_stock_threshold')
             ->orderBy('name')
             ->get(['id', 'name', 'unit', 'current_stock', 'low_stock_threshold']));
+
+        Route::get('/paid-sessions', [SessionController::class, 'paidHistory']);
     });
 
     // Menu + inventory CRUD + cancellation log: manager-and-up. Path keeps

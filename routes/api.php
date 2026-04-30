@@ -3,6 +3,7 @@
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\ExportController;
 use App\Http\Controllers\MpesaController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\PaymentController;
@@ -80,6 +81,9 @@ Route::middleware('auth:sanctum')->group(function () {
             ->get(['id', 'name', 'unit', 'current_stock', 'low_stock_threshold']));
 
         Route::get('/paid-sessions', [SessionController::class, 'paidHistory']);
+
+        Route::get('/exports/paid-sessions.csv', [ExportController::class, 'paidSessions']);
+        Route::get('/exports/expenses.csv', [ExportController::class, 'expenses']);
     });
 
     // Menu + inventory CRUD + cancellation log: manager-and-up. Path keeps

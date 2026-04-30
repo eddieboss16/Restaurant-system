@@ -63,13 +63,16 @@
                 <h2 class="font-semibold text-slate-800">
                     <span x-text="reportPeriod === 'day' ? 'Today\'s snapshot' : 'This month\'s snapshot'"></span>
                 </h2>
-                <div class="flex gap-1 text-xs">
+                <div class="flex gap-1 text-xs items-center">
                     <button @click="setReportPeriod('day')"
                             :class="reportPeriod === 'day' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600'"
                             class="rounded px-3 py-1">Today</button>
                     <button @click="setReportPeriod('month')"
                             :class="reportPeriod === 'month' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600'"
                             class="rounded px-3 py-1">This month</button>
+                    <span class="text-slate-300 mx-1">|</span>
+                    <button @click="downloadCsv('paid-sessions')" class="text-slate-500 hover:text-slate-800 underline">Sessions CSV</button>
+                    <button @click="downloadCsv('expenses')" class="text-slate-500 hover:text-slate-800 underline">Expenses CSV</button>
                 </div>
             </div>
 
@@ -537,6 +540,33 @@
                 deltaClass(current, previous) {
                     if (current === previous) return 'text-slate-500';
                     return current > previous ? 'text-emerald-600' : 'text-red-600';
+                },
+
+                async downloadCsv(kind) {
+                    const today = new Date();
+                    const from = this.reportPeriod === 'day'
+                        ? today.toISOString().slice(0, 10)
+                        : new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+                    const to = today.toISOString().slice(0, 10);
+                    const url = '/api/exports/' + kind + '.csv?from=' + from + '&to=' + to;
+
+                    try {
+                        const r = await fetch(url, {
+                            headers: { 'Authorization': 'Bearer ' + API_TOKEN, 'Accept': 'text/csv' },
+                        });
+                        if (!r.ok) throw new Error('Download failed: HTTP ' + r.status);
+                        const blob = await r.blob();
+                        const objectUrl = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = objectUrl;
+                        a.download = kind + '_' + from + '_to_' + to + '.csv';
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                        URL.revokeObjectURL(objectUrl);
+                    } catch (e) {
+                        this.error = e.message;
+                    }
                 },
 
                 async createStaff() {

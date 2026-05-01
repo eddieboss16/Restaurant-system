@@ -15,3 +15,8 @@ Schedule::command('mpesa:expire-stuck-stk')->everyMinute();
 // Daily P&L summary to the owner's WhatsApp at 11:59pm server-local.
 // No-ops if WHATSAPP_ENABLED=false.
 Schedule::command('summary:send-daily')->dailyAt('23:59');
+
+// Recover print jobs the bridge picked up but never acknowledged
+// (bridge crashed mid-print, network drop, etc.). Resets them to
+// pending so the next bridge cycle picks them back up.
+Schedule::command('prints:reset-stuck')->everyMinute();

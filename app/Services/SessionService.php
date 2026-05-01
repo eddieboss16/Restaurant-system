@@ -10,6 +10,10 @@ use RuntimeException;
 
 class SessionService
 {
+    public function __construct(private ReceiptService $receipts)
+    {
+    }
+
     public function open(int $waiterId, ?string $customerLabel): CustomerSession
     {
         return CustomerSession::create([
@@ -34,7 +38,7 @@ class SessionService
             throw new RuntimeException('Cannot collect payment while orders are still pending or preparing.');
         }
 
-        return DB::transaction(function () use ($session, $data, $waiterId) {
+        $payment = DB::transaction(function () use ($session, $data, $waiterId) {
             $payment = Payment::create([
                 'session_id' => $session->id,
                 'method' => $data['method'],
@@ -51,5 +55,11 @@ class SessionService
 
             return $payment;
         });
+
+        // Auto-queue the receipt for printing. Outside the transaction so a
+        // print-job insert failure doesn't roll back the payment itself.
+        $this->receipts->queueForSession($session->fresh(), $waiterId);
+
+        return $payment;
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Payment;
+use App\Services\ReceiptService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -10,7 +11,7 @@ use Illuminate\Support\Facades\Log;
 
 class MpesaController extends Controller
 {
-    public function callback(Request $request): JsonResponse
+    public function callback(Request $request, ReceiptService $receipts): JsonResponse
     {
         $stk = $request->input('Body.stkCallback');
 
@@ -35,7 +36,7 @@ class MpesaController extends Controller
             return $okResponse;
         }
 
-        DB::transaction(function () use ($payment, $stk) {
+        $succeeded = DB::transaction(function () use ($payment, $stk) {
             $resultCode = (int) ($stk['ResultCode'] ?? -1);
 
             if ($resultCode === 0) {
@@ -53,14 +54,22 @@ class MpesaController extends Controller
                     'status' => 'paid',
                     'closed_at' => now(),
                 ]);
-            } else {
-                $payment->update([
-                    'status' => 'failed',
-                    'mpesa_result_code' => $resultCode,
-                    'mpesa_result_desc' => $stk['ResultDesc'] ?? 'Failed',
-                ]);
+
+                return true;
             }
+
+            $payment->update([
+                'status' => 'failed',
+                'mpesa_result_code' => $resultCode,
+                'mpesa_result_desc' => $stk['ResultDesc'] ?? 'Failed',
+            ]);
+            return false;
         });
+
+        // Auto-queue receipt on success, outside the transaction.
+        if ($succeeded) {
+            $receipts->queueForSession($payment->session->fresh(), $payment->collected_by);
+        }
 
         return $okResponse;
     }

@@ -161,4 +161,184 @@ class PrintJobTest extends TestCase
         $this->assertSame('failed', $job->status);
         $this->assertSame('printer offline', $job->error);
     }
+
+    // ----- Auto-queue on payment -----
+
+    public function test_cash_payment_auto_queues_a_print_job(): void
+    {
+        $waiter = User::factory()->waiter()->create();
+        $session = \App\Models\CustomerSession::create([
+            'waiter_id' => $waiter->id,
+            'status' => 'served',
+            'opened_at' => now(),
+        ]);
+        \App\Models\Order::create([
+            'session_id' => $session->id,
+            'menu_item_id' => $this->menuItems['soda']->id,
+            'quantity' => 1,
+            'unit_price' => 80,
+            'status' => 'delivered',
+        ]);
+
+        $this->actingAs($waiter, 'sanctum')
+            ->postJson("/api/sessions/{$session->id}/payment", ['method' => 'cash', 'amount' => 80])
+            ->assertCreated();
+
+        $this->assertDatabaseHas('print_jobs', [
+            'session_id' => $session->id,
+            'queued_by' => $waiter->id,
+            'status' => 'pending',
+        ]);
+    }
+
+    public function test_auto_queue_can_be_disabled_via_config(): void
+    {
+        config()->set('print.auto_queue', false);
+
+        $waiter = User::factory()->waiter()->create();
+        $session = \App\Models\CustomerSession::create([
+            'waiter_id' => $waiter->id,
+            'status' => 'served',
+            'opened_at' => now(),
+        ]);
+        \App\Models\Order::create([
+            'session_id' => $session->id,
+            'menu_item_id' => $this->menuItems['soda']->id,
+            'quantity' => 1,
+            'unit_price' => 80,
+            'status' => 'delivered',
+        ]);
+
+        $this->actingAs($waiter, 'sanctum')
+            ->postJson("/api/sessions/{$session->id}/payment", ['method' => 'cash', 'amount' => 80])
+            ->assertCreated();
+
+        $this->assertDatabaseCount('print_jobs', 0);
+    }
+
+    public function test_mpesa_callback_success_auto_queues_a_print_job(): void
+    {
+        $waiter = User::factory()->waiter()->create();
+        $session = \App\Models\CustomerSession::create([
+            'waiter_id' => $waiter->id,
+            'status' => 'served',
+            'opened_at' => now(),
+        ]);
+        \App\Models\Order::create([
+            'session_id' => $session->id,
+            'menu_item_id' => $this->menuItems['soda']->id,
+            'quantity' => 1,
+            'unit_price' => 80,
+            'status' => 'delivered',
+        ]);
+        \App\Models\Payment::create([
+            'session_id' => $session->id,
+            'method' => 'mpesa',
+            'amount' => 80,
+            'status' => 'pending',
+            'mpesa_checkout_request_id' => 'CR-auto',
+            'collected_by' => $waiter->id,
+        ]);
+
+        $this->postJson('/api/mpesa/callback', [
+            'Body' => ['stkCallback' => [
+                'CheckoutRequestID' => 'CR-auto',
+                'ResultCode' => 0,
+                'ResultDesc' => 'Success',
+                'CallbackMetadata' => ['Item' => [
+                    ['Name' => 'MpesaReceiptNumber', 'Value' => 'NLJ7RT61SV'],
+                ]],
+            ]],
+        ])->assertOk();
+
+        $this->assertDatabaseHas('print_jobs', [
+            'session_id' => $session->id,
+            'status' => 'pending',
+        ]);
+    }
+
+    public function test_mpesa_callback_failure_does_not_queue_a_print_job(): void
+    {
+        $waiter = User::factory()->waiter()->create();
+        $session = \App\Models\CustomerSession::create([
+            'waiter_id' => $waiter->id,
+            'status' => 'served',
+            'opened_at' => now(),
+        ]);
+        \App\Models\Payment::create([
+            'session_id' => $session->id,
+            'method' => 'mpesa',
+            'amount' => 80,
+            'status' => 'pending',
+            'mpesa_checkout_request_id' => 'CR-fail',
+            'collected_by' => $waiter->id,
+        ]);
+
+        $this->postJson('/api/mpesa/callback', [
+            'Body' => ['stkCallback' => [
+                'CheckoutRequestID' => 'CR-fail',
+                'ResultCode' => 1032,
+                'ResultDesc' => 'User cancelled',
+            ]],
+        ])->assertOk();
+
+        $this->assertDatabaseCount('print_jobs', 0);
+    }
+
+    // ----- Stuck-print sweep -----
+
+    public function test_reset_stuck_print_jobs_pushes_old_printing_back_to_pending(): void
+    {
+        $waiter = User::factory()->waiter()->create();
+        $session = $this->paidSession($waiter);
+
+        $stuck = PrintJob::create([
+            'session_id' => $session->id,
+            'queued_by' => $waiter->id,
+            'payload' => ['items' => []],
+            'status' => 'printing',
+        ]);
+        $stuck->forceFill(['updated_at' => now()->subMinutes(5)])->save();
+
+        $fresh = PrintJob::create([
+            'session_id' => $session->id,
+            'queued_by' => $waiter->id,
+            'payload' => ['items' => []],
+            'status' => 'printing',
+        ]);
+        $fresh->forceFill(['updated_at' => now()->subSeconds(30)])->save();
+
+        $this->artisan('prints:reset-stuck')->assertSuccessful();
+
+        $this->assertSame('pending', $stuck->fresh()->status);
+        $this->assertSame('printing', $fresh->fresh()->status);
+    }
+
+    public function test_reset_stuck_print_jobs_does_not_touch_printed_or_failed(): void
+    {
+        $waiter = User::factory()->waiter()->create();
+        $session = $this->paidSession($waiter);
+
+        $printed = PrintJob::create([
+            'session_id' => $session->id,
+            'queued_by' => $waiter->id,
+            'payload' => ['items' => []],
+            'status' => 'printed',
+        ]);
+        $printed->forceFill(['updated_at' => now()->subHour()])->save();
+
+        $failed = PrintJob::create([
+            'session_id' => $session->id,
+            'queued_by' => $waiter->id,
+            'payload' => ['items' => []],
+            'status' => 'failed',
+            'error' => 'something',
+        ]);
+        $failed->forceFill(['updated_at' => now()->subHour()])->save();
+
+        $this->artisan('prints:reset-stuck')->assertSuccessful();
+
+        $this->assertSame('printed', $printed->fresh()->status);
+        $this->assertSame('failed', $failed->fresh()->status);
+    }
 }

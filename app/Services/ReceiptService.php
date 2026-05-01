@@ -3,9 +3,30 @@
 namespace App\Services;
 
 use App\Models\CustomerSession;
+use App\Models\PrintJob;
 
 class ReceiptService
 {
+    /**
+     * Build the receipt payload and enqueue a print job for the bridge to
+     * pick up. No-op when print.auto_queue is false. Returns the PrintJob
+     * if queued, null if skipped.
+     */
+    public function queueForSession(CustomerSession $session, ?int $queuedBy = null): ?PrintJob
+    {
+        if (! config('print.auto_queue', true)) {
+            return null;
+        }
+
+        return PrintJob::create([
+            'session_id' => $session->id,
+            'queued_by' => $queuedBy,
+            'payload' => $this->buildForSession($session),
+            'status' => 'pending',
+        ]);
+    }
+
+
     /**
      * Build a printer-agnostic receipt structure for a paid (or about-to-be-paid)
      * session. The bridge translates this into ESC/POS bytes -- the PHP side

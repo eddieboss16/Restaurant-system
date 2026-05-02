@@ -1,159 +1,98 @@
-# Release Notes
+# Changelog
 
-## [Unreleased](https://github.com/laravel/laravel/compare/v12.12.1...12.x)
+All notable changes to the restaurant POS, since the initial Laravel 12 skeleton. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [v12.12.1](https://github.com/laravel/laravel/compare/v12.12.0...v12.12.1) - 2026-03-10
+## [Unreleased]
 
-* [12.x] Makes imports consistent by [@nunomaduro](https://github.com/nunomaduro) in https://github.com/laravel/laravel/pull/6760
+Everything below is on the `master` branch awaiting first deploy. Tag as `v1.0.0` when the live launch happens.
 
-## [v12.12.0](https://github.com/laravel/laravel/compare/v12.11.2...v12.12.0) - 2026-03-09
+### Added
 
-* Update phpunit version to ^11.5.50 to address CVE by [@PerryvanderMeer](https://github.com/PerryvanderMeer) in https://github.com/laravel/laravel/pull/6746
-* [12.x] Add `APP_NAME` fallback in mail config by [@apoorvdarshan](https://github.com/apoorvdarshan) in https://github.com/laravel/laravel/pull/6755
-* [12.x] Neutralize DB_URL in default phpunit.xml by [@Husseinadq](https://github.com/Husseinadq) in https://github.com/laravel/laravel/pull/6761
+#### Domain
 
-## [v12.11.2](https://github.com/laravel/laravel/compare/v12.11.1...v12.11.2) - 2026-01-19
+- Customer-session lifecycle (`open → ordered → served → paid`) with free-text customer labels.
+- Recipe-driven inventory: orders auto-deduct ingredient quantities from `resources` inside a row-locked transaction. Orders are rejected (422) with the exact shortage when stock is insufficient.
+- Cancellation logging with mandatory 5-char reason; cancelled orders are blocked after delivery.
+- Four roles with separate dashboards: **admin**, **manager**, **waiter**, **kitchen**. Admin is a wildcard that passes every `role:` middleware.
+- Primary-admin (lowest-id admin) protection: secondary admins cannot demote or deactivate the owner.
 
-* [12.x] Update composer dev script to ensure no timeout by [@jackbayliss](https://github.com/jackbayliss) in https://github.com/laravel/laravel/pull/6735
-* [12.x] Update jobs/cache migrations by [@jackbayliss](https://github.com/jackbayliss) in https://github.com/laravel/laravel/pull/6736
-* [12.x] Remove failed jobs indexes by [@jackbayliss](https://github.com/jackbayliss) in https://github.com/laravel/laravel/pull/6739
-* [12.x] Add `APP_URL` fallback in filesystems config by [@KentarouTakeda](https://github.com/KentarouTakeda) in https://github.com/laravel/laravel/pull/6742
-* chore: Update outdated GitHub Actions version by [@pgoslatara](https://github.com/pgoslatara) in https://github.com/laravel/laravel/pull/6743
+#### Floor & kitchen
 
-## [v12.11.1](https://github.com/laravel/laravel/compare/v12.11.0...v12.11.1) - 2025-12-23
+- Waiter dashboard: open sessions, add items, mark delivered, collect payment (cash, M-Pesa STK, manual M-Pesa code).
+- Waiter "Today" header strip + expandable list of paid sessions for the day.
+- Kitchen queue with one-click status flips (`pending → preparing → ready`), 8-second auto-refresh.
+- Kitchen history view: last 50 delivered orders.
+- Manual "Print receipt" button on each paid session row.
 
-* Use environment variable for `DB_SSLMODE` - Postgres by [@robsontenorio](https://github.com/robsontenorio) in https://github.com/laravel/laravel/pull/6727
-* fix: ensure APP_URL does not have trailing slash in filesystem by [@msamgan](https://github.com/msamgan) in https://github.com/laravel/laravel/pull/6728
+#### Manager dashboard
 
-## [v12.11.0](https://github.com/laravel/laravel/compare/v12.10.1...v12.11.0) - 2025-11-25
+- P&L reports tab with Today / This-month toggle, last-period delta, payment-method split, top items.
+- Expense ledger with categories (`supplies`, `salaries`, `utilities`, `rent`, `transport`, `other`), CRUD with manager-edits-own / admin-edits-any / admin-only-deletes.
+- Menu CRUD (was admin-only before).
+- Inventory restocking with reason-logged transactions (was admin-only before).
+- Read-only Staff view with admins ghosted (managers see floor + kitchen, never admins).
+- Paid sessions history (latest 100) with date filtering.
+- Low-stock warning banner.
 
-* fix: cookies are not available for subdomains by default by [@joostdebruijn](https://github.com/joostdebruijn) in https://github.com/laravel/laravel/pull/6705
-* Fix PHP 8.5 PDO Driver Specific Constant Deprecation by [@RyanSchaefer](https://github.com/RyanSchaefer) in https://github.com/laravel/laravel/pull/6710
-* Ignore Laravel compiled views for Vite  by [@QistiAmal1212](https://github.com/QistiAmal1212) in https://github.com/laravel/laravel/pull/6714
+#### Admin dashboard
 
-## [v12.10.1](https://github.com/laravel/laravel/compare/v12.10.0...v12.10.1) - 2025-11-06
+- Same Reports tab as manager, plus full Staff CRUD (hire, deactivate, demote, reset password).
+- Online-now indicator on each staff row, derived from Sanctum `last_used_at`.
+- Cancellation log viewer (last 100).
 
-* Update schema URL in package.json by [@robinmiau](https://github.com/robinmiau) in https://github.com/laravel/laravel/pull/6701
+#### M-Pesa STK push (real Daraja integration)
 
-## [v12.10.0](https://github.com/laravel/laravel/compare/v12.9.1...v12.10.0) - 2025-11-04
+- `POST /api/sessions/{id}/payment/stk` triggers an STK push to the customer's phone.
+- Public callback at `POST /api/mpesa/callback` (no auth) marks the payment completed and closes the session. Idempotent against retries.
+- Manual code entry remains as a fallback when STK fails or the customer paid via paybill outside the app.
+- Stuck-STK auto-cleanup: pending STK pushes are auto-failed after 5 minutes via `php artisan mpesa:expire-stuck-stk` (scheduled every minute).
 
-* Add background driver by [@barryvdh](https://github.com/barryvdh) in https://github.com/laravel/laravel/pull/6699
+#### WhatsApp daily summary (Meta Cloud API)
 
-## [v12.9.1](https://github.com/laravel/laravel/compare/v12.9.0...v12.9.1) - 2025-10-23
+- `php artisan summary:send-daily` sends today's P&L snapshot to the owner's WhatsApp at 23:59 server-local. Disabled by default (`WHATSAPP_ENABLED=false`).
+- Supports plain-text (24h-window only) or pre-approved templates with 6 body variables.
 
-* [12.x] Replace Bootcamp with Laravel Learn by [@AhmedAlaa4611](https://github.com/AhmedAlaa4611) in https://github.com/laravel/laravel/pull/6692
-* [12.x] Comment out CLI workers for fresh applications by [@timacdonald](https://github.com/timacdonald) in https://github.com/laravel/laravel/pull/6693
+#### Receipt printing (ESC/POS via Node bridge)
 
-## [v12.9.0](https://github.com/laravel/laravel/compare/v12.8.0...v12.9.0) - 2025-10-21
+- PHP enqueues `print_jobs` rows with the receipt as JSON; Node bridge in [`bridge/`](bridge/) polls and forwards ESC/POS to the printer.
+- Bridge auth via shared `X-Bridge-Token` header (constant-time `hash_equals`).
+- **Auto-print on payment**: cash, manual M-Pesa code, and STK callback success all auto-queue a receipt. Toggleable via `PRINT_AUTO_QUEUE`.
+- Stuck-printing-job sweep: jobs in `printing` status for >2 minutes are reset to `pending` so the next bridge cycle picks them up. Scheduled every minute.
 
-**Full Changelog**: https://github.com/laravel/laravel/compare/v12.8.0...v12.9.0
+#### Reports + exports
 
-## [v12.8.0](https://github.com/laravel/laravel/compare/v12.7.1...v12.8.0) - 2025-10-20
+- Today + this-month snapshots: revenue (current + previous), expenses, net, sessions paid, payment-method split, top items, expenses-by-category, cancellation count.
+- CSV export endpoints for paid sessions and expenses, manager + admin, with date-range query params. Streamed via `streamDownload()` so large exports don't OOM.
 
-* [12.x] Makes test suite using broadcast's `null` driver by [@nunomaduro](https://github.com/nunomaduro) in https://github.com/laravel/laravel/pull/6691
+#### Documentation
 
-## [v12.7.1](https://github.com/laravel/laravel/compare/v12.7.0...v12.7.1) - 2025-10-15
+- [README.md](README.md): project description, quick start, links to other docs.
+- [CLAUDE.md](CLAUDE.md): briefing loaded into every Claude Code session — stack, conventions, known traps.
+- [DEPLOYMENT.md](DEPLOYMENT.md): step-by-step path to production (Daraja, WhatsApp, server provisioning, nginx + HTTPS, cron, backups, smoke testing, rollback).
+- [bridge/README.md](bridge/README.md): printer bridge setup and hardware notes.
 
-* Added `failover` driver to the `queue` config comment.  by [@sajjadhossainshohag](https://github.com/sajjadhossainshohag) in https://github.com/laravel/laravel/pull/6688
+#### Tests
 
-## [v12.7.0](https://github.com/laravel/laravel/compare/v12.6.0...v12.7.0) - 2025-10-14
+- 116 feature tests, 345 assertions, runs in ~8 seconds against in-memory SQLite.
+- `SeedsRestaurantData` trait + `User::factory()->{role}()` state methods for fixture setup.
 
-**Full Changelog**: https://github.com/laravel/laravel/compare/v12.6.0...v12.7.0
+### Changed
 
-## [v12.6.0](https://github.com/laravel/laravel/compare/v12.5.0...v12.6.0) - 2025-10-02
+- Reports response shape unified to `{ period, label, revenue.{current,previous}, ... }` so daily and monthly views render from one template.
+- Manager elevated in `CustomerSessionPolicy` to act on any non-paid session (not just their own).
+- Login redirect routes each role to its own dashboard instead of dumping everyone on `/waiter/dashboard`.
+- Date columns cast as `'date:Y-m-d'` (not just `'date'`) so SQLite tests and MySQL prod produce identical strings for date-range comparisons.
 
-* Fix setup script by [@goldmont](https://github.com/goldmont) in https://github.com/laravel/laravel/pull/6682
+### Fixed
 
-## [v12.5.0](https://github.com/laravel/laravel/compare/v12.4.0...v12.5.0) - 2025-09-30
+- `AuthController::logout` no longer 500s for session-authenticated callers (`TransientToken` has no `delete()`).
+- Inventory deduction holds a `lockForUpdate()` row lock so concurrent orders can't both pass the stock check and push inventory negative.
+- `Route::view(...)->middleware(...)` ordering — chaining `->view()` after `Route::middleware()` is invalid in Laravel 12.
+- Cron-required tasks (stuck-STK cleanup, daily summary, stuck-print sweep) now register correctly via `Schedule::command()` in `routes/console.php`.
 
-* [12.x] Fix type casting for environment variables in config files by [@AhmedAlaa4611](https://github.com/AhmedAlaa4611) in https://github.com/laravel/laravel/pull/6670
-* Fix CVEs affecting vite by [@faissaloux](https://github.com/faissaloux) in https://github.com/laravel/laravel/pull/6672
-* Update .editorconfig to target compose.yaml by [@fredikaputra](https://github.com/fredikaputra) in https://github.com/laravel/laravel/pull/6679
-* Add pre-package-uninstall script to composer.json by [@cosmastech](https://github.com/cosmastech) in https://github.com/laravel/laravel/pull/6681
+### Removed
 
-## [v12.4.0](https://github.com/laravel/laravel/compare/v12.3.1...v12.4.0) - 2025-08-29
+- `users.pin` column — was seeded for waiters but never used by any flow. Reversible migration; rebuild as a deliberate shift-switcher feature if the use case comes back.
+- Stock Laravel marketing README and CHANGELOG (this file).
 
-* [12.x] Add default Redis retry configuration by [@mateusjatenee](https://github.com/mateusjatenee) in https://github.com/laravel/laravel/pull/6666
-
-## [v12.3.1](https://github.com/laravel/laravel/compare/v12.3.0...v12.3.1) - 2025-08-21
-
-* [12.x] Bump Pint version by [@AhmedAlaa4611](https://github.com/AhmedAlaa4611) in https://github.com/laravel/laravel/pull/6653
-* [12.x] Making sure all related processed are closed when terminating the currently command by [@AhmedAlaa4611](https://github.com/AhmedAlaa4611) in https://github.com/laravel/laravel/pull/6654
-* [12.x] Use application name from configuration by [@AhmedAlaa4611](https://github.com/AhmedAlaa4611) in https://github.com/laravel/laravel/pull/6655
-* Bring back postAutoloadDump script by [@jasonvarga](https://github.com/jasonvarga) in https://github.com/laravel/laravel/pull/6662
-
-## [v12.3.0](https://github.com/laravel/laravel/compare/v12.2.0...v12.3.0) - 2025-08-03
-
-* Fix Critical Security Vulnerability in form-data Dependency by [@izzygld](https://github.com/izzygld) in https://github.com/laravel/laravel/pull/6645
-* Revert "fix" by [@RobertBoes](https://github.com/RobertBoes) in https://github.com/laravel/laravel/pull/6646
-* Change composer post-autoload-dump script to Artisan command by [@lmjhs](https://github.com/lmjhs) in https://github.com/laravel/laravel/pull/6647
-
-## [v12.2.0](https://github.com/laravel/laravel/compare/v12.1.0...v12.2.0) - 2025-07-11
-
-* Add Vite 7 support by [@timacdonald](https://github.com/timacdonald) in https://github.com/laravel/laravel/pull/6639
-
-## [v12.1.0](https://github.com/laravel/laravel/compare/v12.0.11...v12.1.0) - 2025-07-03
-
-* [12.x] Disable nightwatch in testing by [@laserhybiz](https://github.com/laserhybiz) in https://github.com/laravel/laravel/pull/6632
-* [12.x] Reorder environment variables in phpunit.xml for logical grouping by [@AhmedAlaa4611](https://github.com/AhmedAlaa4611) in https://github.com/laravel/laravel/pull/6634
-* Change to hyphenate prefixes and cookie names by [@u01jmg3](https://github.com/u01jmg3) in https://github.com/laravel/laravel/pull/6636
-* [12.x] Fix type casting for environment variables in config files by [@AhmedAlaa4611](https://github.com/AhmedAlaa4611) in https://github.com/laravel/laravel/pull/6637
-
-## [v12.0.11](https://github.com/laravel/laravel/compare/v12.0.10...v12.0.11) - 2025-06-10
-
-**Full Changelog**: https://github.com/laravel/laravel/compare/v12.0.10...v12.0.11
-
-## [v12.0.10](https://github.com/laravel/laravel/compare/v12.0.9...v12.0.10) - 2025-06-09
-
-* fix alphabetical order by [@Khuthaily](https://github.com/Khuthaily) in https://github.com/laravel/laravel/pull/6627
-* [12.x] Reduce redundancy and keeps the .gitignore file cleaner by [@AhmedAlaa4611](https://github.com/AhmedAlaa4611) in https://github.com/laravel/laravel/pull/6629
-* [12.x] Fix: Add void return type to satisfy Rector analysis by [@Aluisio-Pires](https://github.com/Aluisio-Pires) in https://github.com/laravel/laravel/pull/6628
-
-## [v12.0.9](https://github.com/laravel/laravel/compare/v12.0.8...v12.0.9) - 2025-05-26
-
-* [12.x] Remove apc by [@AhmedAlaa4611](https://github.com/AhmedAlaa4611) in https://github.com/laravel/laravel/pull/6611
-* [12.x] Add JSON Schema to package.json by [@martinbean](https://github.com/martinbean) in https://github.com/laravel/laravel/pull/6613
-* Minor language update by [@woganmay](https://github.com/woganmay) in https://github.com/laravel/laravel/pull/6615
-* Enhance .gitignore to exclude common OS and log files by [@mohammadRezaei1380](https://github.com/mohammadRezaei1380) in https://github.com/laravel/laravel/pull/6619
-
-## [v12.0.8](https://github.com/laravel/laravel/compare/v12.0.7...v12.0.8) - 2025-05-12
-
-* [12.x] Clean up URL formatting in README by [@AhmedAlaa4611](https://github.com/AhmedAlaa4611) in https://github.com/laravel/laravel/pull/6601
-
-## [v12.0.7](https://github.com/laravel/laravel/compare/v12.0.6...v12.0.7) - 2025-04-15
-
-* Add `composer run test` command by [@crynobone](https://github.com/crynobone) in https://github.com/laravel/laravel/pull/6598
-* Partner Directory Changes in ReadME by [@joshcirre](https://github.com/joshcirre) in https://github.com/laravel/laravel/pull/6599
-
-## [v12.0.6](https://github.com/laravel/laravel/compare/v12.0.5...v12.0.6) - 2025-04-08
-
-**Full Changelog**: https://github.com/laravel/laravel/compare/v12.0.5...v12.0.6
-
-## [v12.0.5](https://github.com/laravel/laravel/compare/v12.0.4...v12.0.5) - 2025-04-02
-
-* [12.x] Update `config/mail.php` to match the latest core configuration by [@AhmedAlaa4611](https://github.com/AhmedAlaa4611) in https://github.com/laravel/laravel/pull/6594
-
-## [v12.0.4](https://github.com/laravel/laravel/compare/v12.0.3...v12.0.4) - 2025-03-31
-
-* Bump vite from 6.0.11 to 6.2.3 - Vulnerability patch by [@abdel-aouby](https://github.com/abdel-aouby) in https://github.com/laravel/laravel/pull/6586
-* Bump vite from 6.2.3 to 6.2.4 by [@thinkverse](https://github.com/thinkverse) in https://github.com/laravel/laravel/pull/6590
-
-## [v12.0.3](https://github.com/laravel/laravel/compare/v12.0.2...v12.0.3) - 2025-03-17
-
-* Remove reverted change from CHANGELOG.md by [@AJenbo](https://github.com/AJenbo) in https://github.com/laravel/laravel/pull/6565
-* Improves clarity in app.css file by [@AhmedAlaa4611](https://github.com/AhmedAlaa4611) in https://github.com/laravel/laravel/pull/6569
-* [12.x] Refactor: Structural improvement for clarity by [@AhmedAlaa4611](https://github.com/AhmedAlaa4611) in https://github.com/laravel/laravel/pull/6574
-* Bump axios from 1.7.9 to 1.8.2 - Vulnerability patch by [@abdel-aouby](https://github.com/abdel-aouby) in https://github.com/laravel/laravel/pull/6572
-* [12.x] Remove Unnecessarily [@source](https://github.com/source) by [@AhmedAlaa4611](https://github.com/AhmedAlaa4611) in https://github.com/laravel/laravel/pull/6584
-
-## [v12.0.2](https://github.com/laravel/laravel/compare/v12.0.1...v12.0.2) - 2025-03-04
-
-* Make the github test action run out of the box independent of the choice of testing framework by [@ndeblauw](https://github.com/ndeblauw) in https://github.com/laravel/laravel/pull/6555
-
-## [v12.0.1](https://github.com/laravel/laravel/compare/v12.0.0...v12.0.1) - 2025-02-24
-
-* [12.x] prefer stable stability by [@pataar](https://github.com/pataar) in https://github.com/laravel/laravel/pull/6548
-
-## [v12.0.0 (2025-??-??)](https://github.com/laravel/laravel/compare/v11.0.2...v12.0.0)
-
-Laravel 12 includes a variety of changes to the application skeleton. Please consult the diff to see what's new.
+[Unreleased]: https://example.com/restaurant-system/compare/initial...HEAD
